@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "wishlist2cart-web",
+    "wishlist2cart_test": "wishlist2cart-web"
+  },
+  "targets": {},
+  "etags": {}
+}
