@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
           email: authUser.email,
           avatar:
             authUser.photoURL ||
-            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser.email)}`
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser.email)}`,
         };
         await setDoc(userRef, fallbackUserData);
         setUser(fallbackUserData);
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       uid: user.uid,
       name,
       email: user.email,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`,
     };
 
     await setDoc(doc(db, "users", user.uid), userData);
@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithGoogle = () => {
-    return signInWithRedirect(auth, provider); // Uses redirect
+    return signInWithRedirect(auth, provider);
   };
 
   const logout = async () => {
@@ -89,21 +89,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Handle Google login redirect result
     getRedirectResult(auth)
       .then(async (result) => {
         if (result?.user) {
           const user = result.user;
           const userRef = doc(db, "users", user.uid);
-          const userExists = (await getDoc(userRef)).exists();
+          const userDoc = await getDoc(userRef);
 
-          if (!userExists) {
+          if (!userDoc.exists()) {
             const newUserData = {
               uid: user.uid,
               name: user.displayName || "Guest",
               email: user.email,
               avatar:
                 user.photoURL ||
-                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`
+                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`,
             };
             await setDoc(userRef, newUserData);
             setUser(newUserData);
@@ -112,27 +113,36 @@ export const AuthProvider = ({ children }) => {
             await syncUserToLocalState(user.uid);
           }
 
-          navigate("/dashboard"); // ✅ redirect after successful login
+          navigate("/dashboard", { replace: true });
         }
       })
       .catch((err) => {
         console.error("Redirect login error:", err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      });
+
+    // ❌ Don't call setLoading(false) here
+  }, [navigate]);
 
   useEffect(() => {
+    // Primary place to track auth state
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      if (authUser && !user) {
+      if (authUser) {
         try {
           await syncUserToLocalState(authUser.uid);
         } catch (err) {
           console.error("Sync error:", err);
+          setUser(null);
+          localStorage.removeItem("wishlist2cart_user");
         }
+      } else {
+        setUser(null);
+        localStorage.removeItem("wishlist2cart_user");
       }
+      setLoading(false); // ✅ Only here
     });
+
     return () => unsubscribe();
-  }, [user]);
+  }, []);
 
   return (
     <AuthContext.Provider

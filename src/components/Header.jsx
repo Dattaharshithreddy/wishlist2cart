@@ -1,207 +1,229 @@
-import React, { useState, useEffect } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { ShoppingCart, Heart, Menu, X, LogOut, User, Star } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/components/ui/use-toast';
+// src/components/Header.jsx
+import React, { useState, useEffect } from "react";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import {
+  ShoppingCart,
+  Heart,
+  Menu,
+  X,
+  LogOut,
+  User,
+  Search,
+  Globe,
+  Gift,
+  Star,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+
+const NAV_LINKS = [
+  { path: "/dashboard", name: "Dashboard", icon: Heart, roles: ["user", "admin"] },
+  { path: "/add-wishlist", name: "Add Wishlist", icon: Globe, roles: ["user", "admin"] },
+  { path: "/add-w2c", name: "Add W2C", icon: Gift, roles: ["user", "admin"] },
+  { path: "/cart", name: "My Cart", icon: ShoppingCart, roles: ["user", "admin"] },
+  { path: "/synced-sites", name: "Synced Sites", icon: Star, roles: ["user", "admin"] },
+  { path: "/settings", name: "Settings", icon: User, roles: ["user", "admin"] },
+  { path: "/admin", name: "Admin Panel", icon: User, roles: ["admin"] },
+];
 
 const Header = () => {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    setMenuOpen(false); // close menu on route change
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const handleLogout = () => {
     logout();
-    toast({
-      title: "Logged Out",
-      description: "You have been successfully logged out.",
-    });
-    navigate('/');
+    navigate("/");
   };
 
-  const navLinkClasses = "text-sm font-medium transition-colors hover:text-violet-500";
-  const activeLinkClasses = "text-violet-600 dark:text-violet-400";
+  const filteredLinks = NAV_LINKS.filter(
+    (link) => user && (!link.roles || link.roles.includes(user.role || "user"))
+  );
 
   return (
     <motion.header
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
-        isScrolled ? 'bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg shadow-md' : 'bg-transparent'
+      className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-gray-900/90 border-b border-gray-200 dark:border-gray-700 transition-shadow ${
+        scrolled ? "shadow-2xl" : ""
       }`}
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ type: "spring", stiffness: 70, damping: 20 }}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <motion.div
-              whileHover={{ rotate: 15 }}
-              className="w-8 h-8 bg-gradient-to-br from-violet-500 to-blue-500 rounded-lg flex items-center justify-center"
+      <div className="max-w-[1440px] mx-auto flex items-center justify-between p-4 md:px-8">
+        {/* Logo */}
+        <Link
+          to="/"
+          className="flex items-center gap-3 select-none"
+          aria-label="Homepage"
+        >
+          <motion.div
+            whileHover={{ scale: 1.2, rotate: 15 }}
+            className="w-12 h-12 rounded-3xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg text-white text-3xl font-black"
+          >
+            W2C
+          </motion.div>
+          <span className="hidden sm:block font-black text-3xl tracking-wide bg-gradient-to-r from-purple-700 via-indigo-700 to-pink-600 bg-clip-text text-transparent">
+            Wishlist2Cart
+          </span>
+        </Link>
+
+        {/* Desktop Navigation */}
+        <nav className="hidden md:flex items-center gap-8">
+          {filteredLinks.map(({ path, name, icon: IconComp }) => (
+            <NavLink
+              key={path}
+              to={path}
+              className={({ isActive }) =>
+                `flex items-center gap-1 px-4 py-2 rounded-lg font-semibold text-lg transition-colors ${
+                  isActive
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/40"
+                    : "text-gray-700 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
+                }`
+              }
             >
-              <ShoppingCart className="w-5 h-5 text-white" />
-            </motion.div>
-            <span className="text-xl font-bold tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-blue-600 dark:from-violet-400 dark:to-blue-400">
-              Wishlist2Cart
-            </span>
-          </Link>
+              <IconComp className="w-5 h-5" />
+              {name}
+            </NavLink>
+          ))}
+        </nav>
 
-          {user && (
-            <nav className="hidden md:flex items-center gap-6">
-              <NavLink
+        {/* Actions */}
+        <div className="flex items-center gap-4">
+          {/* Search Icon (could expand to input) */}
+          <button
+            aria-label="Search"
+            className="hidden md:flex items-center justify-center w-11 h-11 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-700 transition"
+          >
+            <Search className="w-6 h-6 text-indigo-600" />
+          </button>
+
+          {/* User Controls */}
+          {user ? (
+            <>
+              <Link
                 to="/dashboard"
-                className={({ isActive }) =>
-                  `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`
-                }
+                className="relative inline-flex items-center justify-center p-2 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-700 transition"
+                aria-label="Wishlist"
               >
-                Dashboard
-              </NavLink>
-              <NavLink
-                to="/add-wishlist"
-                className={({ isActive }) =>
-                  `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`
-                }
-              >
-                Add Wishlist
-              </NavLink>
-              <NavLink
-                to="/cart"
-                className={({ isActive }) =>
-                  `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`
-                }
-              >
-                My Cart
-              </NavLink>
+                <Heart className="h-6 w-6 text-indigo-600" />
+              </Link>
 
-              {/* New Links Added Here */}
-              <NavLink
-                to="/brands"
-                className={({ isActive }) =>
-                  `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`
-                }
+              <Link
+                to="/cart"
+                className="relative inline-flex items-center justify-center p-2 rounded-full hover:bg-indigo-100 dark:hover:bg-indigo-700 transition"
+                aria-label="Cart"
               >
-                Wishlist2Cart Brands
-              </NavLink>
-              <NavLink
-                to="/marketplace"
-                className={({ isActive }) =>
-                  `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`
-                }
+                <ShoppingCart className="h-6 w-6 text-indigo-600" />
+                {/* TODO: Add Badge on cart count */}
+              </Link>
+
+              <Link
+                to="/settings"
+                className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-lg transition"
+                aria-label="User Settings"
+                title={user.name || "User Settings"}
               >
-                Marketplace Picks
-              </NavLink>
-            </nav>
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name || "User Avatar"}
+                    className="w-10 h-10 rounded-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <User className="w-6 h-6" />
+                )}
+              </Link>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Log Out"
+                onClick={handleLogout}
+                className="text-indigo-600 hover:text-indigo-800 dark:hover:text-indigo-400"
+              >
+                <LogOut className="w-6 h-6" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              asChild
+              className="text-indigo-600 font-extrabold hover:text-indigo-800 dark:hover:text-indigo-400"
+            >
+              <Link to="/login">Log In</Link>
+            </Button>
           )}
 
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2">
-              {user ? (
-                <>
-                  <Button variant="ghost" size="icon" asChild>
-                    <Link to="/dashboard"><Heart className="h-5 w-5" /></Link>
-                  </Button>
-                  <Button variant="ghost" size="icon" asChild>
-                    <Link to="/cart"><ShoppingCart className="h-5 w-5" /></Link>
-                  </Button>
-                  <Button variant="ghost" size="icon" asChild>
-                    <Link to="/settings"><User className="h-5 w-5" /></Link>
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={handleLogout}>
-                    <LogOut className="h-5 w-5" />
-                  </Button>
-                </>
-              ) : (
-                <Button asChild>
-                  <Link to="/login">Login</Link>
-                </Button>
-              )}
-            </div>
-            <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
-          </div>
+          {/* Mobile Hamburger */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label="Toggle menu"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </Button>
         </div>
       </div>
-      {isMenuOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          className="md:hidden bg-white dark:bg-gray-900 pb-4"
-        >
-          <nav className="flex flex-col items-center gap-4 pt-4">
-            {user ? (
-              <>
-                <NavLink
-                  to="/dashboard"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Dashboard
-                </NavLink>
-                <NavLink
-                  to="/add-wishlist"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Add Wishlist
-                </NavLink>
-                <NavLink
-                  to="/cart"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  My Cart
-                </NavLink>
 
-                {/* New Links Added Here - Mobile Menu */}
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.nav
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="md:hidden bg-white dark:bg-gray-900 py-4 shadow-lg border-b border-gray-300 dark:border-gray-700"
+          >
+            <div className="flex flex-col space-y-1 px-6">
+              {filteredLinks.map(({ path, name, icon: IconComp }) => (
                 <NavLink
-                  to="/brands"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
+                  key={path}
+                  to={path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-3 font-semibold rounded-md transition-colors ${
+                      isActive
+                        ? "bg-indigo-600 text-white"
+                        : "text-gray-700 hover:bg-indigo-100 dark:text-gray-300 dark:hover:bg-indigo-700"
+                    }`
+                  }
+                  onClick={() => setMenuOpen(false)}
                 >
-                  Wishlist2Cart Brands
+                  <IconComp className="w-5 h-5" />
+                  {name}
                 </NavLink>
-                <NavLink
-                  to="/marketplace"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Marketplace Picks
-                </NavLink>
+              ))}
 
-                <NavLink
-                  to="/settings"
-                  className={({ isActive }) => `${navLinkClasses} ${isActive ? activeLinkClasses : ''}`}
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Settings
-                </NavLink>
-                <Button
-                  variant="ghost"
+              {user && (
+                <button
+                  className="w-full text-left px-4 py-3 font-semibold text-red-600 hover:bg-red-100 dark:hover:bg-red-700 dark:text-red-400 rounded-md"
                   onClick={() => {
-                    handleLogout();
-                    setIsMenuOpen(false);
+                    logout();
+                    setMenuOpen(false);
+                    navigate("/");
                   }}
                 >
-                  Logout
-                </Button>
-              </>
-            ) : (
-              <Button asChild onClick={() => setIsMenuOpen(false)}>
-                <Link to="/login">Login</Link>
-              </Button>
-            )}
-          </nav>
-        </motion.div>
-      )}
+                  Log Out
+                </button>
+              )}
+            </div>
+          </motion.nav>
+        )}
+      </AnimatePresence>
     </motion.header>
   );
 };

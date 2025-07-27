@@ -2,8 +2,11 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { createLogger, defineConfig } from 'vite';
 
+
 const isDev = process.env.NODE_ENV !== 'production';
 let inlineEditPlugin, editModeDevPlugin;
+
+
 
 if (isDev) {
 	inlineEditPlugin = (await import('./plugins/visual-editor/vite-plugin-react-inline-editor.js')).default;
@@ -176,6 +179,8 @@ const addTransformIndexHtml = {
 	},
 };
 
+
+
 console.warn = () => {};
 
 const logger = createLogger()
@@ -189,25 +194,28 @@ logger.error = (msg, options) => {
 	loggerError(msg, options);
 }
 
+
+
 export default defineConfig({
-	customLogger: logger,
-	plugins: [
-		...(isDev ? [inlineEditPlugin(), editModeDevPlugin()] : []),
-		react(),
-		addTransformIndexHtml
-	],
-	server: {
-		cors: true,
-		headers: {
-			'Cross-Origin-Embedder-Policy': 'credentialless',
-		},
-		allowedHosts: true,
-	},
-	resolve: {
-		extensions: ['.jsx', '.js', '.tsx', '.ts', '.json', ],
-		alias: {
-			'@': path.resolve(__dirname, './src'),
-		},
+  customLogger: logger, // your custom logger if defined
+  plugins: [
+    ...(isDev ? [inlineEditPlugin(), editModeDevPlugin()] : []),
+    react(),
+    addTransformIndexHtml, // make sure these are defined/imported
+  ],
+  server: {
+    cors: true,
+    headers: {
+      //'Cross-Origin-Embedder-Policy': 'credentialless',
+    },
+    allowedHosts: true,
+  },
+  resolve: {
+    extensions: ['.jsx', '.js', '.tsx', '.ts', '.json'],
+    alias: {
+      '@': path.resolve(__dirname, './src'), // <-- important for your @ imports
+    },
+
 	},
 	build: {
 		rollupOptions: {
@@ -218,5 +226,6 @@ export default defineConfig({
 				'@babel/types'
 			]
 		}
+		
 	}
 });

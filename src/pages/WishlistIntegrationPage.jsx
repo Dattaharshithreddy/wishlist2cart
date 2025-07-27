@@ -19,65 +19,70 @@ const WishlistIntegrationPage = () => {
   const { addToWishlist } = useWishlist();
 
   const handleFetch = async (e) => {
-    e.preventDefault();
-    if (!url) {
-      toast({
-        title: "URL Required",
-        description: "Please paste a product URL to fetch details.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsFetching(true);
-    setFetchedData(null);
-
-    try {
-     const scrapingApiUrl = `https://scrapeproduct-sa566smtjq-uc.a.run.app/?url=${encodeURIComponent(url)}`;
-const res = await fetch(`http://localhost:3001/proxy?url=${encodeURIComponent(scrapingApiUrl)}`);
-
-
-      if (!res.ok) throw new Error("Failed to fetch product details.");
-      const data = await res.json();
-
-      const parsed = {
-        title: data.title || "Unknown Product",
-        price: data.price || 0,
-        image: data.image,
-        platform: data.platform || "Unknown",
-        tags: [],
-      };
-
-      setFetchedData(parsed);
-      setTags("");
-      toast({
-        title: "✔ Product Fetched",
-        description: `Fetched product from ${parsed.platform}`,
-      });
-    } catch (err) {
-      toast({
-        title: "Fetch Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-    } finally {
-      setIsFetching(false);
-    }
-  };
-
-  const handleAddToWishlist = () => {
-    if (!fetchedData) return;
-    const newItem = {
-      ...fetchedData,
-      tags: tags.split(',').map(t => t.trim()).filter(t => t),
-    };
-    addToWishlist(newItem);
+  e.preventDefault();
+  if (!url) {
     toast({
-      title: "Item Added!",
-      description: `${fetchedData.title} has been added to your wishlist.`,
+      title: "URL Required",
+      description: "Please paste a product URL to fetch details.",
+      variant: "destructive",
     });
-    setTimeout(() => navigate('/dashboard'), 800);
+    return;
+  }
+
+  setIsFetching(true);
+  setFetchedData(null);
+
+  try {
+    const response = await fetch("http://localhost:3001/scrape", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ url })
+});
+
+
+    if (!response.ok) throw new Error("Failed to fetch product details.");
+    const data = await response.json();
+
+    const parsed = {
+      title: data.title || "Unknown Product",
+      price: parseFloat(data.price.replace(/[^\d.]/g, '')) || 0,
+      image: data.image,
+      platform: data.platform || "Unknown",
+      tags: [],
+    };
+
+    setFetchedData(parsed);
+    setTags("");
+    toast({
+      title: "✔ Product Fetched",
+      description: `Fetched product from ${parsed.platform}`,
+    });
+  } catch (err) {
+    toast({
+      title: "Fetch Failed",
+      description: err.message,
+      variant: "destructive",
+    });
+  } finally {
+    setIsFetching(false);
+  }
+};
+const handleAddToWishlist = () => {
+  if (!fetchedData) return;
+  const newItem = {
+    ...fetchedData,
+    tags: tags.split(',').map(t => t.trim()).filter(t => t),
   };
+  addToWishlist(newItem);
+  toast({
+    title: "Item Added!",
+    description: `${fetchedData.title} has been added to your wishlist.`,
+  });
+  setTimeout(() => navigate('/dashboard'), 800);
+};
+
 
   return (
     <>

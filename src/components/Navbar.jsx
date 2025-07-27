@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Heart, User, LogOut, Menu } from 'lucide-react';
+import { ShoppingCart, Heart, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
@@ -20,12 +19,15 @@ const Navbar = () => {
     logout();
     navigate('/');
     toast({
-      title: "Logged out successfully",
-      description: "See you soon! 👋",
+      title: 'Logged out successfully',
+      description: 'See you soon! 👋',
     });
   };
 
   const isActive = (path) => location.pathname === path;
+
+  // Calculate total quantity in cart (sum of quantities)
+  const totalCartCount = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
   return (
     <motion.nav
@@ -37,10 +39,7 @@ const Navbar = () => {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              className="text-2xl font-bold gradient-text"
-            >
+            <motion.div whileHover={{ scale: 1.05 }} className="text-2xl font-bold gradient-text">
               Wishlist2Cart
             </motion.div>
           </Link>
@@ -80,7 +79,7 @@ const Navbar = () => {
             {user ? (
               <>
                 {/* Wishlist Icon */}
-                <Link to="/dashboard">
+                <Link to="/dashboard" aria-label="Go to Wishlist">
                   <Button variant="ghost" size="icon" className="relative text-white hover:bg-white/10">
                     <Heart className="h-5 w-5" />
                     {wishlistItems.length > 0 && (
@@ -92,12 +91,12 @@ const Navbar = () => {
                 </Link>
 
                 {/* Cart Icon */}
-                <Link to="/cart">
+                <Link to="/cart" aria-label="Go to Cart">
                   <Button variant="ghost" size="icon" className="relative text-white hover:bg-white/10">
                     <ShoppingCart className="h-5 w-5" />
-                    {cartItems.length > 0 && (
+                    {totalCartCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-purple-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {cartItems.length}
+                        {totalCartCount}
                       </span>
                     )}
                   </Button>
@@ -105,16 +104,21 @@ const Navbar = () => {
 
                 {/* User Menu */}
                 <div className="flex items-center space-x-2">
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    className="h-8 w-8 rounded-full border-2 border-white/20"
-                  />
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name || 'User avatar'}
+                      className="h-8 w-8 rounded-full border-2 border-white/20"
+                    />
+                  ) : (
+                    <UserIconPlaceholder /> {/* Optional: your user icon fallback */}
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={handleLogout}
                     className="text-white hover:bg-white/10"
+                    aria-label="Logout"
                   >
                     <LogOut className="h-4 w-4" />
                   </Button>
@@ -122,9 +126,7 @@ const Navbar = () => {
               </>
             ) : (
               <Link to="/login">
-                <Button className="bg-white text-purple-600 hover:bg-white/90">
-                  Sign In
-                </Button>
+                <Button className="bg-white text-purple-600 hover:bg-white/90">Sign In</Button>
               </Link>
             )}
           </div>
