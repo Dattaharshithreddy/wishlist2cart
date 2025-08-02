@@ -1,25 +1,44 @@
-
-import React from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useLocation, Outlet } from 'react-router-dom';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import ModernSidebar from '@/components/Dashboard/ModernSidebar';
 
-const Layout = ({ children }) => {
+const Layout = () => {
   const location = useLocation();
-  const noHeaderFooterRoutes = ['/login'];
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const showHeaderFooter = !noHeaderFooterRoutes.includes(location.pathname);
+  // Pages to hide header/sidebar/footer
+  const noLayoutRoutes = ['/login'];
+  const shouldHideLayout = noLayoutRoutes.includes(location.pathname);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+  }, [location]);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans flex flex-col">
-      {showHeaderFooter && <Header />}
-      <main className="flex-grow">
-        {children}
-      </main>
-      {showHeaderFooter && <Footer />}
+    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 font-sans flex flex-col overflow-x-hidden">
+      {/* Header */}
+      {!shouldHideLayout && (
+        <Header onHamburgerClick={() => setIsMobileMenuOpen(true)} />
+      )}
+      <div className="flex flex-1">
+        {/* Sidebar */}
+        {!shouldHideLayout && (
+          <ModernSidebar
+            isMobileMenuOpen={isMobileMenuOpen}
+            setIsMobileMenuOpen={setIsMobileMenuOpen}
+          />
+        )}
+        {/* Main Content */}
+        <main className="flex-grow">
+          <Outlet />
+        </main>
+      </div>
+      {/* Footer */}
+      {!shouldHideLayout && <Footer />}
     </div>
   );
 };
 
 export default Layout;
-  

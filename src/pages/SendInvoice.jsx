@@ -1,93 +1,99 @@
-const functions = require("firebase-functions");
-const nodemailer = require("nodemailer");
-const jsPDF = require("jspdf");
-require("jspdf-autotable");
+const functions = require('firebase-functions');
+const nodemailer = require('nodemailer');
+const jsPDF = require('jspdf');
+require('jspdf-autotable');
+
+// Load Gmail creds from Firebase environment config
+require('dotenv').config();
+
+const gmailUser = process.env.EMAIL_USER;
+const gmailPass = process.env.EMAIL_PASS;
+
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: gmailUser,
+    pass: gmailPass,
+  },
+  // tls: { rejectUnauthorized: false }, // optional if you face TLS issues
+});
 
 exports.sendInvoice = functions.https.onRequest(async (req, res) => {
   const { order, email } = req.body;
 
   if (!order || !email) {
-    return res.status(400).send("Missing order or email.");
+    return res.status(400).send('Missing order or email.');
   }
 
   try {
-    // Normalize address object
     const address = order.shippingAddress || order.address || {};
 
-    // Generate PDF
     const doc = new jsPDF();
 
-    // Header
+    // PDF Header
     doc.setFontSize(18);
-    doc.text("Wishlist2Cart Invoice", 15, 20);
+    doc.text('Wishlist2Cart Invoice', 15, 20);
     doc.setFontSize(12);
     doc.text(`Order ID: ${order.id}`, 15, 30);
-    doc.text(`Date: ${order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A"}`, 15, 38);
+    doc.text(`Date: ${order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}`, 15, 38);
 
-    // Shipping Address Section
+    // Shipping Address
     doc.setFontSize(14);
-    doc.text("Shipping Address:", 15, 48);
+    doc.text('Shipping Address:', 15, 48);
     doc.setFontSize(10);
     const addressText = `
-${address.fullName || ""}
-${address.streetAddress || address.address || ""}
-${address.city || ""} - ${address.postalCode || ""}
-${address.country || ""}
-Phone: ${address.phone || "N/A"}
+${address.fullName || ''}
+${address.streetAddress || address.address || ''}
+${address.city || ''} - ${address.postalCode || ''}
+${address.country || ''}
+Phone: ${address.phone || 'N/A'}
 `;
     const splitAddress = doc.splitTextToSize(addressText.trim(), 180);
     doc.text(splitAddress, 15, 54);
 
-    // Prepare rows for items table
-    const cartItems = order.cartItems || [];
-    const rows = cartItems.map((item) => {
+    // Line items
+    const cartItems = Array.isArray(order.cartItems) ? order.cartItems : [];
+    const rows = cartItems.map(item => {
       const tax = (item.price * 0.18).toFixed(2);
       const total = ((item.price * item.quantity) + parseFloat(tax)).toFixed(2);
       return [
-        item.title || 'N/A',
+        item.title || 'Untitled',
         item.quantity || 1,
-        `₹${item.price.toFixed(2)}`,
+        `₹${(item.price || 0).toFixed(2)}`,
         `₹${tax}`,
-        `₹${total}`
+        `₹${total}`,
       ];
     });
 
-    // Add table to PDF
-    doc.autoTable({
-      startY: 75 + splitAddress.length * 5,
-      head: [["Item", "Qty", "Price", "GST (18%)", "Total"]],
-      body: rows,
-      theme: "striped",
-      headStyles: { fillColor: [22, 160, 133] },
-    });
+    // Table with items
+    try {
+      doc.autoTable({
+        startY: 75 + splitAddress.length * 5,
+        head: [['Item', 'Qty', 'Price', 'GST (18%)', 'Total']],
+        body: rows,
+        theme: 'striped',
+        headStyles: { fillColor: [22, 160, 133] },
+      });
+    } catch (pdfErr) {
+      console.error('❌ PDF table generation failed:', pdfErr);
+    }
 
-    // Grand total
-    const finalY = doc.lastAutoTable.finalY + 10;
+    // Total
+    const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 120;
     const totalAmount = order.totalValue ?? order.total ?? 0;
     doc.setFontSize(12);
     doc.text(`Grand Total: ₹${Number(totalAmount).toFixed(2)}`, 15, finalY);
 
     // Footer
     doc.setFontSize(10);
-    doc.text("Thank you for shopping with Wishlist2Cart!", 15, finalY + 15);
-    doc.text("For support, visit wishlistcart.com/support or contact us.", 15, finalY + 22);
+    doc.text('Thank you for shopping with Wishlist2Cart!', 15, finalY + 15);
+    doc.text('For support, visit wishlistcart.com/support', 15, finalY + 22);
 
-    // Convert PDF to buffer
-    const pdfBuffer = doc.output("arraybuffer");
+    const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
 
-    // Configure Nodemailer transporter
-    // IMPORTANT: Use environment variables or Firebase config for sensitive data!
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: "dattaharshithreddy@gmail.com",  // your email
-        pass: "rvzb egna tzfh hhjo",          // your app password - secure this properly
-      },
-    });
-
-    // Email options with professional text and the PDF attached
     const mailOptions = {
-      from: "Wishlist2Cart <dattaharshithreddy@gmail.com>",
+      from: `Wishlist2Cart <${gmailUser}>`,
       to: email,
       subject: `Your Wishlist2Cart Invoice - Order #${order.id}`,
       text: `
@@ -103,19 +109,18 @@ Wishlist2Cart Team
       attachments: [
         {
           filename: `invoice_${order.id}.pdf`,
-          content: Buffer.from(pdfBuffer),
-          contentType: "application/pdf",
+          content: pdfBuffer,
+          contentType: 'application/pdf',
         },
       ],
     };
 
-    // Send email
     await transporter.sendMail(mailOptions);
     console.log(`✅ Invoice sent to ${email}`);
 
-    return res.status(200).send("Email sent!");
+    return res.status(200).send('Email sent!');
   } catch (error) {
-    console.error("Mail error:", error);
-    return res.status(500).send("Failed to send email.");
+    console.error('❌ Mail error:', error.stack || error.message || error);
+    return res.status(500).send('Failed to send email.');
   }
 });

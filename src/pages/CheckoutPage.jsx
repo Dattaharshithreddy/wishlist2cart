@@ -21,7 +21,7 @@ const blankAddress = {
 };
 
 export default function CheckoutPage() {
-  const { cartItems, clearCart, getTotalValue } = useCart();
+  const { cartItems, clearCart, getTotalValue, couponApplied, couponDiscountPercent } = useCart();
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -34,17 +34,25 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('razorpay');
 
-  // Load user addresses
+  const BACKEND_URL = import.meta.env.VITE_PUBLIC_API_URL;
+  const RAZORPAY_KEY = import.meta.env.VITE_PUBLIC_RAZORPAY_KEY;
+
+  const discountedTotal = getTotalValue;
+
   useEffect(() => {
     if (!user) return;
     async function fetchAddresses() {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          const data = userDoc.data();
-          setAddresses(data.addresses || []);
-          const def = (data.addresses || []).find(a => a.isDefault);
-          setSelectedAddressId(def ? def.id : null);
+          const userAddresses = userDoc.data()?.addresses || [];
+          setAddresses(userAddresses);
+          const def = userAddresses.find(a => a.isDefault);
+          if (def) {
+            setSelectedAddressId(def.id);
+          } else if (userAddresses.length > 0) {
+            setSelectedAddressId(userAddresses[0].id);
+          }
         }
       } catch (error) {
         toast({ title: 'Failed to load addresses', description: error.message, variant: 'destructive' });
@@ -55,6 +63,9 @@ export default function CheckoutPage() {
 
   const handleNewAddressChange = (field, val) => {
     setNewAddress(prev => ({ ...prev, [field]: val }));
+    if (errors[field]) {
+      setErrors(prev => ({...prev, [field]: null}));
+    }
   };
 
   const validateNewAddress = () => {
@@ -71,24 +82,25 @@ export default function CheckoutPage() {
   const addNewAddress = async () => {
     if (!validateNewAddress()) {
       toast({ title: 'Please fill all required fields', variant: 'destructive' });
-      return null; // null indicates failure
+      return null;
     }
     setLoading(true);
     try {
-      const id = Date.now().toString();
+      const id = crypto.randomUUID();
       const addressToAdd = { ...newAddress, id, isDefault: addresses.length === 0 };
+      const updatedAddresses = [...addresses, addressToAdd];
 
       await updateDoc(doc(db, 'users', user.uid), {
-        addresses: [...addresses, addressToAdd],
+        addresses: updatedAddresses,
       });
 
-      setAddresses(prev => [...prev, addressToAdd]);
+      setAddresses(updatedAddresses);
       setSelectedAddressId(id);
       setNewAddress(blankAddress);
       setAddingNew(false);
       setErrors({});
       toast({ title: 'Address added successfully!' });
-      return addressToAdd; // return newly added address to use in order
+      return addressToAdd;
     } catch (error) {
       toast({ title: 'Failed to add address', description: error.message, variant: 'destructive' });
       return null;
@@ -97,134 +109,133 @@ export default function CheckoutPage() {
     }
   };
 
-  // Razorpay load and handler
   const loadRazorpayScript = () =>
-    new Promise((resolve, reject) => {
+    new Promise((resolve) => {
       if (window.Razorpay) return resolve(true);
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.onload = () => resolve(true);
-      script.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
+      script.onerror = () => {
+        toast({ title: 'Razorpay SDK failed to load.', variant: 'destructive' });
+        resolve(false);
+      };
       document.body.appendChild(script);
     });
 
-  const handleRazorpay = async (amount) => {
-    await loadRazorpayScript();
-    return new Promise((resolve, reject) => {
-      const options = {
-        key: 'rzp_test_cJphd4cqU1ois3', // Replace with your real key
-        amount: amount * 100,
-        currency: 'INR',
-        name: 'Wishlist2Cart',
-        description: 'Order Payment',
-        handler: response => resolve(response.razorpay_payment_id),
-        prefill: {
-          name: user.displayName || '',
-          email: user.email,
-        },
-        theme: { color: '#7c3aed' },
-      };
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-      rzp.on('payment.failed', err => {
-        toast({ title: 'Payment Failed', description: err.error?.description, variant: 'destructive' });
-        reject(err);
-      });
-    });
-  };
+  const handleRazorpayPayment = (amount, orderData) => {
+  return new Promise(async (resolve, reject) => {
+    const loaded = await loadRazorpayScript();
+    if (!loaded) return reject(new Error("Could not load Razorpay."));
 
-  const handleOrderSuccess = async (orderDetails, userEmail) => {
-    try {
-      await axios.post("http://localhost:3001/send-invoice", {
-        order: orderDetails,
-        email: userEmail,
-      });
-      console.log("✅ Invoice sent to:", userEmail);
-    } catch (err) {
-      console.error("❌ Error sending invoice:", err);
-    }
-  };
+    const { data: order } = await axios.post(`${BACKEND_URL}/create-order`, {
+      amount: amount, // Amount in paise
+      receipt: `rcpt_${Date.now()}`,
+      notes: {
+        userId: orderData.userId,
+        address: `${orderData.address.streetAddress}, ${orderData.address.city}`
+      }
+    });
+
+    const options = {
+      key: RAZORPAY_KEY,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'Wishlist2Cart',
+      description: 'Order Payment',
+      order_id: order.id,
+      handler: async (response) => {
+          clearCart();
+          toast({ title: 'Payment Successful!' });
+
+          // SEND INVOICE EMAIL HERE
+          await sendInvoiceEmail({ id: order.id, ...orderData, paymentId: response.razorpay_payment_id }, user.email);
+
+          navigate(`/order-success?payment_id=${response.razorpay_payment_id}&order_id=${order.id}`);
+          resolve(response);
+      },
+      prefill: {
+          name: orderData.address.fullName,
+          email: user.email,
+          contact: orderData.address.phone,
+      },
+      theme: { color: '#7c3aed' },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.on('payment.failed', (response) => {
+      toast({ title: 'Payment Failed', description: response.error.description, variant: 'destructive' });
+      reject(new Error(response.error.description));
+    });
+    rzp.open();
+  });
+};
+
+  const sendInvoiceEmail = async (order, email) => {
+  try {
+    await axios.post(`${BACKEND_URL}/send-invoice`, { order, email });
+    toast({ title: 'Invoice email sent successfully' });
+  } catch (error) {
+    console.error('Failed to send invoice email:', error);
+    toast({ title: 'Failed to send invoice email', variant: 'destructive' });
+  }
+};
+
 
   const placeOrder = async () => {
-    if (!user) {
-      toast({
-        title: 'Not logged in',
-        description: 'Sign in to proceed.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    if (!user || cartItems.length === 0 || loading) return;
 
-    if (cartItems.length === 0) {
-      toast({ title: 'Cart is empty', variant: 'destructive' });
-      return;
-    }
-
-    let addressToUse = null;
-
+    let addressToUse = addresses.find(addr => addr.id === selectedAddressId);
     if (addingNew) {
       const newAddr = await addNewAddress();
       if (!newAddr) return;
       addressToUse = newAddr;
-    } else {
-      addressToUse = addresses.find(addr => addr.id === selectedAddressId);
     }
 
     if (!addressToUse) {
-      toast({ title: 'Invalid address selected', variant: 'destructive' });
+      toast({ title: 'Please select or add a shipping address', variant: 'destructive' });
       return;
     }
 
     setLoading(true);
 
+    const totalAmount = discountedTotal;
+    const orderDetails = {
+      userId: user.uid,
+      userName: user.displayName || user.email,
+      items: cartItems.map(({ addedAt, ...rest }) => rest),
+      address: addressToUse,
+      total: totalAmount,
+      paymentMethod,
+      estimatedDelivery: new Date(Date.now() + 5 * 86400000),
+      status: 'Pending Payment',
+      createdAt: serverTimestamp(),
+      couponApplied,
+      couponDiscountPercent,
+    };
+    
     try {
-      const totalAmount = getTotalValue;  // getTotalValue is a number from useCart context
-      let paymentId = 'COD';
-
-      if (paymentMethod === 'razorpay') {
-        paymentId = await handleRazorpay(totalAmount);
+      if (paymentMethod === 'cod') {
+        const orderToSave = { ...orderDetails, status: 'Processing', paymentId: 'COD' };
+        const docRef = await addDoc(collection(db, 'orders'), orderToSave);
+        clearCart();
+        toast({ title: 'Order placed successfully' });
+        await sendInvoiceEmail({ id: docRef.id, ...orderToSave }, user.email);
+        navigate(`/order-success?order_id=${docRef.id}`);
+      } else if (paymentMethod === 'razorpay') {
+        await handleRazorpayPayment(totalAmount, orderDetails);
       }
-
-      const orderDataToSave = {
-        userId: user.uid,
-        userName: user.displayName || user.email || 'Customer',
-        items: cartItems,
-        address: addressToUse,
-        total: totalAmount,
-        paymentId,
-        paymentMethod,
-        estimatedDelivery: new Date(Date.now() + 5 * 86400000),
-        status: 'Processing',
-        createdAt: serverTimestamp(),
-      };
-
-      // Save order to Firestore and get document ID
-      const docRef = await addDoc(collection(db, 'orders'), orderDataToSave);
-
-      // Build order data with ID
-      const orderData = {
-        ...orderDataToSave,
-        id: docRef.id,
-      };
-
-      // Send invoice to user email
-      await handleOrderSuccess(orderData, user.email);
-
-      clearCart();
-      toast({ title: 'Order placed successfully' });
-
-      navigate('/order-success');
     } catch (error) {
-      toast({
-        title: 'Order failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Order Failed', description: error.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
+
+
+  // ... UI rendering remains unchanged
+  // ✅ You don’t need to change anything below this line
+  // ✅ Full JSX code remains as you gave it
   if (!user) return <div className="container mx-auto py-20 text-center">Please log in to checkout.</div>;
   if (cartItems.length === 0) return <div className="container mx-auto py-20 text-center">Your cart is empty.</div>;
 
@@ -237,39 +248,59 @@ export default function CheckoutPage() {
         <h2 className="font-semibold mb-3">Shipping Address</h2>
         {!addingNew && addresses.length > 0 ? (
           <div className="space-y-4">
-            {addresses.map(addr => (
+            {addresses.map((addr) => (
               <div
                 key={addr.id}
                 onClick={() => setSelectedAddressId(addr.id)}
                 className={`p-4 border-2 rounded cursor-pointer transition ${
                   selectedAddressId === addr.id ? 'border-violet-600 bg-violet-50' : 'border-gray-200 hover:border-violet-300'
                 }`}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setSelectedAddressId(addr.id);
+                }}
               >
                 <p className="font-medium text-lg">{addr.fullName}</p>
-                <p>{addr.streetAddress}, {addr.city}, {addr.postalCode}, {addr.country}</p>
+                <p>
+                  {addr.streetAddress}, {addr.city}, {addr.postalCode}, {addr.country}
+                </p>
                 <p className="text-sm text-gray-600">Phone: {addr.phone || 'N/A'}</p>
                 {addr.isDefault && (
-                  <span className="inline-block mt-2 px-2 py-1 text-xs bg-violet-600 text-white rounded-full">Default Address</span>
+                  <span className="inline-block mt-2 px-2 py-1 text-xs bg-violet-600 text-white rounded-full">
+                    Default Address
+                  </span>
                 )}
               </div>
             ))}
-            <Button onClick={() => setAddingNew(true)} disabled={loading}>+ Add New Address</Button>
+            <Button onClick={() => setAddingNew(true)} disabled={loading}>
+              + Add New Address
+            </Button>
           </div>
         ) : (
           <div className="space-y-3 mt-4">
-            {['fullName', 'streetAddress', 'city', 'postalCode', 'country'].map(field => (
+            {['fullName', 'streetAddress', 'city', 'postalCode', 'country'].map((field) => (
               <Input
                 key={field}
                 placeholder={field.replace(/([A-Z])/g, ' $1')}
                 value={newAddress[field]}
-                onChange={e => handleNewAddressChange(field, e.target.value)}
+                onChange={(e) => handleNewAddressChange(field, e.target.value)}
                 disabled={loading}
               />
             ))}
-            <Input placeholder="Phone (optional)" value={newAddress.phone} onChange={e => handleNewAddressChange('phone', e.target.value)} disabled={loading} />
+            <Input
+              placeholder="Phone (optional)"
+              value={newAddress.phone}
+              onChange={(e) => handleNewAddressChange('phone', e.target.value)}
+              disabled={loading}
+            />
             <div className="flex gap-3">
-              <Button variant="secondary" onClick={() => setAddingNew(false)} disabled={loading}>Cancel</Button>
-              <Button onClick={addNewAddress} disabled={loading}>Save Address</Button>
+              <Button variant="secondary" onClick={() => setAddingNew(false)} disabled={loading}>
+                Cancel
+              </Button>
+              <Button onClick={addNewAddress} disabled={loading}>
+                Save Address
+              </Button>
             </div>
           </div>
         )}
@@ -280,11 +311,21 @@ export default function CheckoutPage() {
         <h2 className="font-semibold">Payment Method</h2>
         <div className="space-y-2">
           <label className="flex items-center gap-2">
-            <input type="radio" value="razorpay" checked={paymentMethod === 'razorpay'} onChange={() => setPaymentMethod('razorpay')} />
+            <input
+              type="radio"
+              value="razorpay"
+              checked={paymentMethod === 'razorpay'}
+              onChange={() => setPaymentMethod('razorpay')}
+            />
             Pay Online (UPI / Card / Netbanking)
           </label>
           <label className="flex items-center gap-2">
-            <input type="radio" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} />
+            <input
+              type="radio"
+              value="cod"
+              checked={paymentMethod === 'cod'}
+              onChange={() => setPaymentMethod('cod')}
+            />
             Cash on Delivery (COD)
           </label>
         </div>
@@ -295,8 +336,10 @@ export default function CheckoutPage() {
       </div>
 
       <Button size="lg" onClick={placeOrder} disabled={loading} className="w-full">
-        {loading ? 'Placing Order...' : `Pay ₹${getTotalValue.toFixed(2)}`}
+        {loading ? 'Placing Order...' : `Pay ₹${discountedTotal.toFixed(2)}`}
       </Button>
     </div>
   );
 }
+
+

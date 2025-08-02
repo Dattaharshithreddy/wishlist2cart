@@ -1,212 +1,139 @@
-// server.js
 require('dotenv').config();
-const express       = require('express');
-const cors          = require('cors');
-const puppeteer     = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
-puppeteer.use(StealthPlugin());
+const path = require('path'); // keeping in case needed elsewhere
+const fs = require('fs');
 
-const app  = express();
-const PORT = process.env.PORT || 3001;
+console.log('[Startup] Initializing application...');
+const express = require('express');
+const cors = require('cors');
+const Razorpay = require("razorpay");
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
 
-app.use(cors());
-app.use(express.json());
+const crypto = require("crypto");
+const nodemailer = require('nodemailer');
 
-// Rotate User‑Agents
-const UAS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 ' +
-    '(KHTML, like Gecko) Version/14.1.2 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-];
+// ✅ Correctly extend jsPDF with autoTable
+const admin = require("firebase-admin");
+const { initializeApp, applicationDefault } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 
-// Helper to detect domain
-const normalizeHostname = h => {
-  h = h.toLowerCase();
-  if (h.includes('amazon.') || h.includes('amzn.')) return 'amazon';
-  if (h.includes('flipkart.'))                return 'flipkart';
-  return 'generic';
-};
+console.log('[Startup] All dependencies loaded.');
 
-// Semantic fallback extractor
-const semanticScrape = () => {
-  const clean = s => s?.replace(/\s+/g, ' ').trim() || '';
-  const scoreFor = txt => {
-    const t = txt.toLowerCase();
-    if (!t) return 0;
-    if (/[₹$]\s?\d+/.test(t)) return 5;
-    if (t.includes('price') || t.includes('mrp')) return 3;
-    if (t.includes('product') || t.includes('name')) return 2;
-    return 1;
-  };
+initializeApp({ credential: applicationDefault() });
+const db = getFirestore();
+console.log('[Startup] Firebase initialized.');
 
-  let bestTitle = '', bestPrice = '', bestImage = '';
-  let titleScore = 0, priceScore = 0;
-
-  document.querySelectorAll('body *').forEach(el => {
-    const txt = clean(el.innerText);
-    if (txt.length < 2) return;
-    const sc = scoreFor(txt);
-    const tag = el.tagName.toLowerCase();
-    if (tag.startsWith('h') && sc > titleScore) {
-      bestTitle = txt; titleScore = sc;
-    }
-    if (/[₹$]\s?\d+/.test(txt) && sc >= priceScore) {
-      bestPrice = txt; priceScore = sc;
-    }
-  });
-
-  const imgs = Array.from(document.images)
-    .filter(i => i.naturalWidth > 100 && i.naturalHeight > 100 && i.src.startsWith('http'))
-    .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
-  bestImage = imgs[0]?.src || '';
-
-  return { title: bestTitle, price: bestPrice, image: bestImage };
-};
-
-app.post('/scrape', async (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: 'Missing URL.' });
-
-  let browser, page;
-  try {
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-    page = await browser.newPage();
-    await page.setUserAgent(UAS[Math.floor(Math.random() * UAS.length)]);
-
-    // 1) Navigate and wait for all network calls (including price fetches)
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // 2) JSON‑LD extraction
-    const jsonLdData = await page.evaluate(() => {
-      const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
-        .map(s => s.textContent).filter(Boolean);
-      for (const txt of scripts) {
-        try {
-          const obj = JSON.parse(txt);
-          if (obj['@type'] === 'Product') return obj;
-          if (Array.isArray(obj)) {
-            const prod = obj.find(i => i['@type'] === 'Product');
-            if (prod) return prod;
-          }
-        } catch {}
-      }
-      return null;
-    });
-
-    let title = '', price = '', image = '', rating = '', seller = '';
-
-    if (jsonLdData) {
-      title = jsonLdData.name || '';
-      image = Array.isArray(jsonLdData.image) ? jsonLdData.image[0] : jsonLdData.image || '';
-      const offers = Array.isArray(jsonLdData.offers) ? jsonLdData.offers[0] : (jsonLdData.offers || {});
-      if (offers.price) {
-        price = offers.priceCurrency ? `${offers.priceCurrency} ${offers.price}` : offers.price.toString();
-      }
-      if (offers.seller?.name) seller = offers.seller.name;
-      if (jsonLdData.aggregateRating?.ratingValue) {
-        rating = `${jsonLdData.aggregateRating.ratingValue} out of 5`;
-      }
-    }
-
-    // 3) Domain‑specific fallbacks
-    const domain = normalizeHostname(new URL(url).hostname);
-
-    if (domain === 'amazon' && (!title || !price || !image)) {
-      // Try all known price selectors in turn
-      const priceSelectors = [
-        '#priceblock_ourprice',
-        '#priceblock_dealprice',
-        '#price_inside_buybox',
-        '#corePrice_feature_div .a-offscreen'
-      ];
-      for (let sel of priceSelectors) {
-        if (price) break;
-        try {
-          await page.waitForSelector(sel, { timeout: 5000 });
-          price = await page.$eval(sel, el => el.textContent.trim());
-        } catch {}
-      }
-      // Meta‑tag fallback
-      if (!price) {
-        const amt = await page.$eval('meta[property="product:price:amount"]', el => el.content).catch(() => null);
-        const cur = await page.$eval('meta[property="product:price:currency"]', el => el.content).catch(() => null);
-        if (amt) price = cur ? `${cur} ${amt}` : amt;
-      }
-
-      title  = title  || await page.$eval('#productTitle', el => el.textContent.trim()).catch(()=>'');
-      image  = image  || await page.$eval(
-        '#landingImage, #imgTagWrapperId img[data-old-hires]',
-        el => el.src || el.getAttribute('data-old-hires')
-      ).catch(()=>'');
-      rating = rating || await page.$eval('#acrPopover', el => el.getAttribute('title').trim()).catch(()=>'');
-      seller = seller || await page.$eval('#sellerProfileTriggerId', el => el.textContent.trim()).catch(()=>'');
-      if (!seller) {
-        seller = await page.$eval(
-          '#merchant-info',
-          el => (el.innerText.match(/Sold by\s+(.*)/) || [])[1]?.trim() || ''
-        ).catch(()=>'');
-      }
-    }
-    else if (domain === 'flipkart' && (!title || !price || !image)) {
-      await page.waitForSelector('._30jeq3._16Jk6d, ._1vC4OE, span._16Jk6d', { timeout: 15000 });
-      title = title || await page.$eval('span.B_NuCI, ._35KyD6', el => el.textContent.trim()).catch(()=>'');
-      price = price || await page.$eval(
-        '._30jeq3._16Jk6d, ._1vC4OE, span._16Jk6d',
-        el => el.textContent.trim()
-      ).catch(()=>'');
-      image = image || await page.$eval(
-        'img._396cs4._2amPTt._3qGmMb, img._2r_T1I, ._2r_T1I img',
-        el => el.src
-      ).catch(()=>'');
-    }
-
-    // 4) Semantic fallback
-    if (!title || !price || !image) {
-      const sem = await page.evaluate(semanticScrape);
-      title = title || sem.title;
-      price = price || sem.price;
-      image = image || sem.image;
-    }
-
-    await browser.close();
-
-    if (!title || !price || !image) {
-      return res.status(404).json({
-        error: 'Failed to extract required fields.',
-        got: { title, price, image, rating, seller }
-      });
-    }
-
-    return res.json({ title, price, image, rating, seller });
-  } catch (err) {
-    if (page)    await page.close();
-    if (browser) await browser.close();
-    console.error('❌ scrape error:', err);
-    return res.status(500).json({ error: err.message });
-  }
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET,
 });
+console.log('[Startup] Razorpay client configured.');
 
-app.get('/', (_, res) => res.send('✅ Scraper is running.'));
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER || 'dattaharshithreddy@gmail.com',
-    pass: process.env.EMAIL_PASS || 'dzez artr xgjc kztl',
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
+});
+console.log('[Startup] Nodemailer configured.');
+
+const app = express();
+const PORT = process.env.PORT || 8080;
+app.use(cors());
+
+// Health check
+app.get('/', (_, res) => res.send('✅ API is running.'));
+
+// Webhook (before JSON parser)
+app.post("/payment-success-webhook", express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const signature = req.headers["x-razorpay-signature"];
+    const payload = req.body.toString("utf8");
+
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .update(payload)
+      .digest("hex");
+
+    if (!signature) return res.status(400).send("Missing signature header");
+
+    if (!crypto.timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(signature, 'hex')))
+      return res.status(400).send("Invalid signature");
+
+    const webhookBody = JSON.parse(payload);
+    const orderId = webhookBody?.payload?.payment?.entity?.order_id;
+
+    if (orderId) {
+      await db.collection("orders").doc(orderId).update({
+        status: "Ordered",
+        paymentId: webhookBody.payload.payment.entity.id,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`✅ Order ${orderId} marked as Ordered`);
+    }
+
+    res.status(200).send("Webhook handled");
+  } catch (err) {
+    console.error("❌ Error in webhook:", err);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.use(express.json());
+
+app.post("/add-item", async (req, res) => {
+  try {
+    const { userId, url, title, price, image } = req.body;
+    if (!userId || !url || !title || !price || !image)
+      return res.status(400).send("Missing required product information.");
+
+    const wishlistItem = { url, title, price, image, addedAt: new Date() };
+    const wishlistRef = db.collection('wishlists').doc(userId);
+    await wishlistRef.set({ items: admin.firestore.FieldValue.arrayUnion(wishlistItem) }, { merge: true });
+
+    res.status(200).json({ message: "Item added to wishlist successfully!" });
+  } catch (error) {
+    console.error("❌ Error adding item to wishlist:", error);
+    res.status(500).send("Failed to add item to wishlist.");
+  }
+});
+
+app.post("/create-order", async (req, res) => {
+  try {
+    // ✅ Receive all the data from the frontend
+    const { amount, currency = "INR", receipt, items, address, userId } = req.body;
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency,
+      receipt
+    });
+
+    // ✅ Create ONE document using the Razorpay Order ID as the Firestore Document ID
+    await db.collection("orders").doc(order.id).set({
+      userId: userId,
+      razorpayOrderId: order.id, // Store the ID for easier querying
+      amount: amount,
+      items: items,
+      address: address,
+      status: "Pending", // The correct initial status
+      createdAt: new Date(),
+    });
+
+    res.status(200).json(order);
+  } catch (error) {
+    console.error("❌ Error creating order:", error);
+    res.status(500).send("Order creation failed");
+  }
 });
 
 app.post('/send-invoice', async (req, res) => {
   try {
     const { order, email } = req.body;
-    if (!order || !email) return res.status(400).json({ message: 'Missing order or email' });
+    if (!order || !email)
+      return res.status(400).json({ message: 'Missing order or email' });
 
     const userName = order.userName || (order.address && order.address.fullName) || 'Valued Customer';
     const address = order.address || {};
@@ -216,8 +143,8 @@ app.post('/send-invoice', async (req, res) => {
       order.createdAt && typeof order.createdAt.toDate === 'function'
         ? order.createdAt.toDate().toLocaleString()
         : order.createdAt
-        ? new Date(order.createdAt).toLocaleString()
-        : 'N/A';
+          ? new Date(order.createdAt).toLocaleString()
+          : 'N/A';
 
     const doc = new jsPDF();
 
@@ -250,8 +177,8 @@ app.post('/send-invoice', async (req, res) => {
       item.originalPrice ? `₹${item.originalPrice.toFixed(2)}` : '-',
     ]);
 
-    // ✅ FIX: use autoTable(doc, ...)
-    autoTable(doc, {
+    // ✅ FIXED: Use doc.autoTable
+    doc.autoTable({
       startY: 80,
       head: [['Product', 'Qty', 'Price', 'Original Price']],
       body: tableRows,
@@ -270,17 +197,13 @@ app.post('/send-invoice', async (req, res) => {
 
     const pdfBuffer = doc.output('arraybuffer');
 
-    const logoPath = path.resolve(__dirname, 'logo.png');
-    const logoExists = fs.existsSync(logoPath);
-
     const mailOptions = {
       from: process.env.EMAIL_USER || 'Wishlist2Cart <dattaharshithreddy@gmail.com>',
       to: email,
       subject: `Your Wishlist2Cart Invoice - Order #${order.id || ''}`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin:auto;">
-          ${logoExists ? `<img src="cid:whishlistLogo" alt="Wishlist2Cart Logo" style="width:140px; margin-bottom: 20px;" />` : ''}
-          <h2 style="color:#2255A4;">Hello, ${userName}</h2>
+          <h2 style="color:#2255A4;"><span style="font-size: 24px;">🛒</span> <strong>${userName}</strong></h2>
           <p>Thank you for your purchase. Please find your invoice attached below.</p>
           <h3>Order Details</h3>
           <ul>
@@ -291,10 +214,10 @@ app.post('/send-invoice', async (req, res) => {
           </ul>
           <h3>Shipping Address</h3>
           <p>
-            ${address.fullName}<br/>
+            ${address.fullName || ''}<br/>
             ${address.streetAddress || address.address || ''}<br/>
-            ${address.city} - ${address.postalCode}<br/>
-            ${address.country}<br/>
+            ${address.city ? address.city + ' - ' : ''}${address.postalCode || ''}<br/>
+            ${address.country || ''}<br/>
             ${address.phone ? 'Phone: ' + address.phone : ''}
           </p>
           <p>If you have any questions, please contact our support team.</p>
@@ -302,11 +225,6 @@ app.post('/send-invoice', async (req, res) => {
         </div>
       `,
       attachments: [
-        ...(logoExists ? [{
-          filename: 'logo.png',
-          path: logoPath,
-          cid: 'whishlistLogo',
-        }] : []),
         {
           filename: `invoice_${order.id || 'order'}.pdf`,
           content: Buffer.from(pdfBuffer),
@@ -325,18 +243,15 @@ app.post('/send-invoice', async (req, res) => {
   }
 });
 
-const shutdown = async () => {
-  if (browser) {
-    await browser.close();
-    console.log('Browser instance closed');
-  }
-  process.exit();
-};
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-
-app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[Server] ✅ Server is running and listening on port ${PORT}`);
 });
 
+process.on('SIGINT', () => {
+  console.log('[Server] SIGINT received, shutting down gracefully.');
+  server.close(() => process.exit(0));
+});
+process.on('SIGTERM', () => {
+  console.log('[Server] SIGTERM received, shutting down gracefully.');
+  server.close(() => process.exit(0));
+});

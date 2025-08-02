@@ -1,3 +1,4 @@
+// CartAggregatorPage.jsx
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { motion } from 'framer-motion';
@@ -18,8 +19,19 @@ const storeLogos = {
 
 export default function CartAggregatorPage() {
   const { toast } = useToast();
-  const { cartItems, getTotalValue, removeFromCart, setQuantity } = useCart();
+  const {
+    cartItems,
+    getTotalValue,
+    removeFromCart,
+    setQuantity,
+    couponApplied,
+    applyCoupon,
+    couponDiscountPercent,
+  } = useCart();
   const navigate = useNavigate();
+
+  const discountedTotal = getTotalValue;
+  // Note: now getTotalValue is discounted total (due to context logic), no extra state needed here
 
   const decreaseQuantity = (item) => {
     const newQty = (item.quantity || 1) - 1;
@@ -57,6 +69,23 @@ export default function CartAggregatorPage() {
       return;
     }
     navigate('/checkout');
+  };
+
+  const handleApplyCoupon = () => {
+    if (couponApplied) {
+      toast({
+        title: 'Coupon Already Applied',
+        description: `You already have a ${couponDiscountPercent}% discount applied.`,
+      });
+      return;
+    }
+    // For demo, only allow 10% discount coupon
+    applyCoupon(10);
+    toast({
+      title: 'Coupon Applied!',
+      description: 'You saved 10% on your order total.',
+      variant: 'success',
+    });
   };
 
   return (
@@ -159,15 +188,21 @@ export default function CartAggregatorPage() {
               <div className="space-y-2 text-lg">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>₹{getTotalValue.toFixed(2)}</span>
+                  <span>₹{(couponApplied ? (discountedTotal / 0.9) : discountedTotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-500 dark:text-gray-400">
                   <span>Shipping</span>
                   <span>Calculated at checkout</span>
                 </div>
+                {couponApplied && (
+                  <div className="flex justify-between text-green-600 dark:text-green-400 font-semibold">
+                    <span>Discount ({couponDiscountPercent}%)</span>
+                    <span>-₹{(discountedTotal * (couponDiscountPercent / (100 - couponDiscountPercent))).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-xl pt-2 border-t border-gray-200 dark:border-gray-700">
                   <span>Total</span>
-                  <span>₹{getTotalValue.toFixed(2)}</span>
+                  <span>₹{discountedTotal.toFixed(2)}</span>
                 </div>
               </div>
               <Button
@@ -179,46 +214,40 @@ export default function CartAggregatorPage() {
               >
                 Proceed to Payment <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-              {/* Insights (optional, placeholder) */}
-              <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <h3 className="text-xl font-semibold mb-3">Price Insights</h3>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 bg-green-100/50 dark:bg-green-900/20 rounded-lg">
-                    <Percent className="h-5 w-5 text-green-600 dark:text-green-400 mt-1 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Potential Savings!</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        We found one of your items for a lower price elsewhere.
-                      </p>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="p-0 h-auto mt-1"
-                        onClick={() => toast({ title: "Feature Not Implemented" })}
-                      >
-                        View Offer
-                      </Button>
+
+              {!couponApplied && cartItems.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                  <h3 className="text-xl font-semibold mb-3">Price Insights</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 bg-green-100/50 dark:bg-green-900/20 rounded-lg">
+                      <Percent className="h-5 w-5 text-green-600 dark:text-green-400 mt-1 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">Potential Savings!</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          Apply Coupon to save more!
+                        </p>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 h-auto mt-1"
+                          onClick={() => applyCoupon(10)}
+                        >
+                          Apply Coupon
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg">
-                    <Tag className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Coupon Available</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Use code <span className="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">SAVE10</span> on Flipkart for 10% off.
-                      </p>
-                      <Button
-                        variant="link"
-                        size="sm"
-                        className="p-0 h-auto mt-1"
-                        onClick={() => toast({ title: "Feature Not Implemented" })}
-                      >
-                        Apply Coupon
-                      </Button>
+                    <div className="flex items-start gap-3 p-3 bg-blue-100/50 dark:bg-blue-900/20 rounded-lg">
+                      <Tag className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-1 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">Coupon Available</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          Use code <span className="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">SAVE10</span> for 10% off on Flipkart.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

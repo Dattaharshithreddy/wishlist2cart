@@ -1,284 +1,315 @@
-import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { useUserOrders } from '../hooks/useUserOrders';
+import { useLogoBase64 } from '../hooks/useLogoBase64';
+import { useExportInvoice } from '../hooks/useExportInvoice';
+import { format, parseISO } from 'date-fns';
+import { useToast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
 
-const ORDERS_PER_PAGE = 5;
+const ORDER_STATUS_FLOW = [
+  'Ordered',
+  'Processing',
+  'Shipped',
+  'Out For Delivery',
+  'Delivered',
+  'Cancelled',
+];
 
-const UserOrdersPage = () => {
+export default function UserOrdersPage() {
   const { user } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const logoBase64 = useLogoBase64('/logo.png');
+  const exportInvoice = useExportInvoice();
+  const { toast } = useToast();
 
-  useEffect(() => {
-    if (!user?.uid) return;
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateRange, setDateRange] = useState({ startDate: null, endDate: null });
 
-    const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      setOrders(data);
-    });
+  const filters = useMemo(() => {
+    const result = {};
+    if (statusFilter && statusFilter.toLowerCase() !== 'all') result.status = statusFilter;
+    if (dateRange.startDate) result.startDate = dateRange.startDate;
+    if (dateRange.endDate) result.endDate = dateRange.endDate;
+    return result;
+  }, [statusFilter, dateRange]);
 
-    return () => unsubscribe();
-  }, [user]);
-
-  const cancelOrder = async (orderId) => {
-    const orderRef = doc(db, 'orders', orderId);
-    await updateDoc(orderRef, { status: 'Cancelled' });
-  };
-
-  const exportInvoice = (order) => {
-  const docPDF = new jsPDF();
-
-  const address = order.address || {};
-  const addressText = `
-${address.fullName || ""}
-${address.address || ""}
-${address.city || ""} - ${address.postalCode || ""}
-${address.country || ""}
-Email: ${address.email || ""}
-`.trim();
-
-  // HEADER
-  docPDF.setFontSize(18);
-  docPDF.text("WishlistCart", 10, 15);
-
-  docPDF.setFontSize(12);
-  docPDF.text(`Invoice`, 150, 15);
-  docPDF.setFontSize(10);
-  docPDF.text(`Order ID: ${order.id}`, 150, 22);
-  docPDF.text(
-    `Date: ${order.createdAt?.toDate?.()?.toLocaleString?.() || ""}`,
-    150,
-    28
-  );
-
-  // SHIPPING INFO
-  docPDF.setFontSize(12);
-  docPDF.text("Shipping Address:", 10, 30);
-  docPDF.setFontSize(10);
-  const lines = docPDF.splitTextToSize(addressText, 180);
-  docPDF.text(lines, 10, 36);
-
-  // TABLE
-  const tableData = (order.items || []).map((item) => [
-    item.name,
-    item.quantity,
-    `₹${item.price}`,
-    `₹${item.quantity * item.price}`,
-  ]);
-
-  autoTable(docPDF, {
-    startY: 50 + lines.length * 5,
-    head: [["Item", "Qty", "Unit Price", "Total"]],
-    body: tableData,
-    theme: "striped",
-    headStyles: { fillColor: [22, 160, 133] },
-  });
-
-  const finalY = docPDF.lastAutoTable.finalY || 100;
-
-  // TOTAL
-  docPDF.setFontSize(12);
-  docPDF.setTextColor(0);
-  docPDF.text(`Total Amount Paid: ₹${order.total}`, 10, finalY + 10);
-
-  // FOOTER
-  docPDF.setFontSize(9);
-  docPDF.setTextColor(100);
-  docPDF.text(
-    "Thank you for shopping with WishlistCart. For support, visit wishlistcart.com/support",
-    10,
-    finalY + 20
-  );
-
-  docPDF.save(`Invoice_Order_${order.id}.pdf`);
-};
-
-
-  const paginatedOrders = orders.slice(
-    (currentPage - 1) * ORDERS_PER_PAGE,
-    currentPage * ORDERS_PER_PAGE
-  );
-
-  const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
+  const {
+    orders,
+    loading,
+    error,
+    loadingMore,
+    hasMore,
+    loadMore,
+    cancelOrder,
+    cancelLoading,
+  } = useUserOrders(user?.uid, filters);
 
   if (!user) {
     return (
-      <div className="container mx-auto py-20 text-center">
+      <div className="text-center mt-10 text-red-500 font-semibold">
         Please log in to view your orders.
       </div>
     );
   }
 
-  if (orders.length === 0) {
-    return (
-      <div className="container mx-auto py-20 text-center">
-        No orders found.
-      </div>
-    );
-  }
+  const visibleOrders = orders;
+
+  const canCancel = (status) => ['Processing', 'Ordered', 'Shipped'].includes(status);
+
+  const handleCancelOrder = async (id) => {
+    if (!window.confirm('Are you sure you want to cancel this order?')) return;
+    try {
+      await cancelOrder(id);
+      toast({
+        title: 'Order Cancelled',
+        description: 'Your order has been successfully cancelled.',
+        variant: 'success',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to cancel the order.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   return (
-    <div className="container mx-auto py-10">
-      <h2 className="text-3xl font-bold mb-6">My Orders</h2>
-      <div className="space-y-8">
-        {paginatedOrders.map((order) => (
-          <div
-            key={order.id}
-            className="bg-white rounded-xl shadow-md p-6 space-y-4"
+   <main className="w-full max-w-5xl mx-auto p-6 flex-1 flex flex-col space-y-6">
+      {/* Filters */}
+      <section className="flex flex-wrap gap-4 items-center mb-6">
+        <label className="flex items-center gap-2 whitespace-nowrap font-medium">
+          <span>Status:</span>
+          <select
+            className="border rounded p-1"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
           >
-            <div className="flex justify-between items-center">
-              <div className="text-lg font-semibold">Order #{order.id}</div>
-              <div
-                className={`text-sm px-3 py-1 rounded-full ${
-                  order.status === 'Delivered'
-                    ? 'bg-green-100 text-green-700'
-                    : order.status === 'Cancelled'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}
-              >
-                {order.status}
-              </div>
-            </div>
+            <option value="all">All</option>
+            {ORDER_STATUS_FLOW.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Start Date:
+          <input
+            type="date"
+            className="border rounded p-1 ml-1"
+            value={dateRange.startDate ? format(dateRange.startDate, 'yyyy-MM-dd') : ''}
+            onChange={(e) =>
+              setDateRange((d) => ({
+                ...d,
+                startDate: e.target.value ? parseISO(e.target.value) : null,
+              }))
+            }
+          />
+        </label>
+        <label>
+          End Date:
+          <input
+            type="date"
+            className="border rounded p-1 ml-1"
+            value={dateRange.endDate ? format(dateRange.endDate, 'yyyy-MM-dd') : ''}
+            onChange={(e) =>
+              setDateRange((d) => ({
+                ...d,
+                endDate: e.target.value ? parseISO(e.target.value) : null,
+              }))
+            }
+          />
+        </label>
+        <button
+          className="ml-2 text-blue-600 underline"
+          onClick={() => {
+            setStatusFilter('all');
+            setDateRange({ startDate: null, endDate: null });
+          }}
+          type="button"
+        >
+          Clear Filters
+        </button>
+      </section>
 
-            <div className="text-sm text-gray-600 space-y-1">
-  <div>
-    <strong>Date:</strong>{' '}
-    {order.createdAt?.toDate?.()?.toLocaleString?.() || ''}
-  </div>
-  <div>
-    <strong>Shipping Address:</strong>
-    <div className="ml-2">
-      <div>{order.address?.fullName}</div>
-      <div>{order.address?.email}</div>
-      <div>{order.address?.address}</div>
-      <div>{order.address?.city} - {order.address?.postalCode}</div>
-      <div>{order.address?.country}</div>
-    </div>
-  </div>
-</div>
+      {/* Loading and Error Handling */}
+      {loading && orders.length === 0 && (
+        <p className="p-10 text-center">Loading orders...</p>
+      )}
+      {error && (
+        <p className="p-10 text-center text-red-600">Error: {error}</p>
+      )}
+      {!loading && !error && orders.length === 0 && (
+        <p className="p-10 text-center">No orders found.</p>
+      )}
 
+      {/* Orders List */}
+      <section className="space-y-8 flex-grow overflow-auto">
+        {visibleOrders.map((order) => {
+          const createdAtDate = order.createdAt?.toDate
+            ? order.createdAt.toDate()
+            : new Date(order.createdAt);
+          const createdAtFormatted = format(createdAtDate, 'PPP p');
+          const statusIndex = ORDER_STATUS_FLOW.indexOf(order.status);
 
-            <div className="space-y-2">
-              <strong className="block text-md mb-1">Items:</strong>
-              {order.items?.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between bg-gray-50 p-3 rounded"
+          return (
+            <article
+              key={order.id}
+              className="bg-white p-6 rounded shadow space-y-4"
+            >
+              <header className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold">Order #{order.id}</h2>
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                    order.status === 'Processing'
+                      ? 'bg-indigo-100 text-indigo-800'
+                      : order.status === 'Ordered'
+                      ? 'bg-blue-100 text-blue-800'
+                      : order.status === 'Shipped'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : order.status === 'Out For Delivery'
+                      ? 'bg-purple-600 text-white'
+                      : order.status === 'Delivered'
+                      ? 'bg-green-100 text-green-800'
+                      : order.status === 'Cancelled'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}
                 >
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={item.image || '/placeholder.jpg'}
-                      alt={item.name}
-                      className="w-16 h-16 object-cover rounded"
-                    />
-                    <div>
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-sm text-gray-500">
-                        Quantity: {item.quantity}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-sm text-gray-700">
-                    ₹{item.price * item.quantity}
-                  </div>
+                  {order.status}
+                </span>
+              </header>
+
+              {/* Order Details */}
+              <div className="text-sm text-gray-700 space-y-2">
+                <div>
+                  <strong>Date:</strong> {createdAtFormatted}
                 </div>
-              ))}
-            </div>
+                <div>
+                  <strong>Shipping Address:</strong>
+                  <address className="not-italic ml-3 space-y-0.5">
+                    <div>{order.address?.fullName}</div>
+                    <div>{order.address?.email}</div>
+                    <div>{order.address?.address}</div>
+                    <div>
+                      {order.address?.city}, {order.address?.postalCode}
+                    </div>
+                    <div>{order.address?.country}</div>
+                  </address>
+                </div>
+              </div>
 
-            <div className="text-right text-lg font-bold">
-              Total: ₹{order.total}
-            </div>
-
-            <div className="mt-4">
-              <strong className="block mb-1">Delivery Status:</strong>
-              <div className="flex items-center gap-2 text-sm">
-                {['Ordered', 'Shipped', 'Delivered'].map((step) => (
-                  <>
+              {/* Status Tracker */}
+              <div className="flex items-center gap-2 flex-wrap text-sm">
+                {ORDER_STATUS_FLOW.map((step, i) => (
+                  <React.Fragment key={step}>
                     <span
-                      key={step}
-                      className={`px-2 py-1 rounded ${
-                        ['Ordered', 'Shipped', 'Delivered'].indexOf(order.status) >=
-                        ['Ordered', 'Shipped', 'Delivered'].indexOf(step)
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-gray-200 text-gray-500'
+                      className={`px-3 py-1 rounded font-semibold ${
+                        i === statusIndex
+                          ? 'bg-purple-600 text-white shadow'
+                          : 'bg-gray-300 text-gray-600'
                       }`}
                     >
                       {step}
                     </span>
-                    {step !== 'Delivered' && '➡️'}
-                  </>
+                    {i !== ORDER_STATUS_FLOW.length - 1 && <span>➡️</span>}
+                  </React.Fragment>
                 ))}
               </div>
-            </div>
 
-            {order.trackingUrl && (
-              <div className="mt-4 text-sm">
-                <a
-                  href={order.trackingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  Track Order
-                </a>
+              {/* Items */}
+              <div className="space-y-2">
+                <strong>Items:</strong>
+                {order.items?.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex justify-between bg-gray-50 p-3 rounded"
+                  >
+                    <div className="flex gap-4 items-center max-w-xs">
+                      <img
+                        src={item.image || '/placeholder.jpg'}
+                        alt={item.name}
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                      <div>
+                        <div className="font-medium truncate">{item.name}</div>
+                        <div className="text-sm">Qty: {item.quantity}</div>
+                      </div>
+                    </div>
+                    <div className="font-semibold">
+                      ₹{(item.price * item.quantity).toFixed(2)}
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
 
-            <div className="flex justify-end items-center gap-4 mt-4">
-              {order.status === 'Ordered' && (
-                <button
-                  onClick={() => cancelOrder(order.id)}
-                  className="px-4 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                >
-                  Cancel Order
-                </button>
+              <div className="text-right font-bold text-lg">
+                Total: ₹{order.total.toFixed(2)}
+              </div>
+
+              {order.estimatedDelivery && (
+                <div className="text-sm mt-2">
+                  <strong>Estimated Delivery:</strong>{' '}
+                  {format(
+                    order.estimatedDelivery?.toDate
+                      ? order.estimatedDelivery.toDate()
+                      : new Date(order.estimatedDelivery),
+                    'PPP'
+                  )}
+                </div>
               )}
-              <button
-                onClick={() => exportInvoice(order)}
-                className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                Download Invoice (PDF)
-              </button>
-            </div>
 
-            <div className="mt-6 text-sm text-gray-600 border-t pt-4">
-              Having an issue with this order?{' '}
-              <a
-                href="/support"
-                className="text-blue-600 hover:underline font-medium"
-              >
-                Contact Support
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
+              {order.trackingUrl && (
+                <div className="mt-2 text-right">
+                  <a
+                    href={order.trackingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline"
+                  >
+                    Track Order
+                  </a>
+                </div>
+              )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center mt-10 gap-2">
-          {[...Array(totalPages)].map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => setCurrentPage(idx + 1)}
-              className={`px-3 py-1 rounded border text-sm ${
-                currentPage === idx + 1
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white text-gray-700'
-              }`}
-            >
-              {idx + 1}
-            </button>
-          ))}
+              {/* Actions */}
+              <div className="flex flex-wrap gap-3 justify-end items-center">
+                <Button
+                  disabled={!logoBase64}
+                  onClick={() => exportInvoice(order)}
+                  className={`px-4 py-2 ${
+                    !logoBase64
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Download Invoice PDF
+                </Button>
+
+                {canCancel(order.status) && (
+                  <Button
+                    onClick={() => handleCancelOrder(order.id)}
+                    disabled={cancelLoading[order.id]}
+                    variant="destructive"
+                  >
+                    {cancelLoading[order.id] ? 'Cancelling...' : 'Cancel Order'}
+                  </Button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      {/* Load More Button Pagination */}
+      {hasMore && (
+        <div className="text-center mt-6">
+          <Button onClick={loadMore} disabled={loadingMore} className="inline-block">
+            {loadingMore ? 'Loading...' : 'Load More'}
+          </Button>
         </div>
       )}
-    </div>
+    </main>
   );
-};
-
-export default UserOrdersPage;
+}

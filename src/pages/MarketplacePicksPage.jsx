@@ -1,206 +1,230 @@
-// src/pages/MarketplacePicksPage.jsx
-import React, { useState, useEffect, useMemo } from "react";
-import { Helmet } from "react-helmet";
-import { motion } from "framer-motion";
-import Fuse from "fuse.js";
-import { collection, query, orderBy, getDocs } from "firebase/firestore";
-import { db } from "../lib/firebase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ExternalLink } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import { useCart } from "@/contexts/CartContext";
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Helmet } from 'react-helmet';
+import { motion } from 'framer-motion';
+import Fuse from 'fuse.js';
+import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import confetti from 'canvas-confetti';
+import Skeleton from 'react-loading-skeleton';
+import { useToast } from '@/components/ui/use-toast';
+import { useWishlist } from '@/contexts/WishlistContext';
+import { Button } from '@/components/ui/button';
+import FancySearchBar from '@/components/FancySearchBar';
+import Pagination from '@/components/Pagination';
+import { ExternalLink, Heart as HeartIcon, Tag } from 'lucide-react';
+import { db } from '../lib/firebase';
+import successSfx from '@/assets/success.mp3';
 
-const platformLogos = {
-  Amazon: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
-  Flipkart: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Flipkart_logo_vector.svg',
-  Myntra: 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Myntra_logo.svg',
-  Alibaba: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/Alibaba_Logo.svg',
-  Meesho: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Meesho_Logomark.png',
-  Other: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Shopping_Cart_Icon.svg/1024px-Shopping_Cart_Icon.svg.png',
-};
-
-const marketplaceCategories = [
-  "Mobiles",
-  "Fashion",
-  "Home Essentials",
-  "Sports & Fitness",
-];
+const CATEGORIES = ['Mobiles', 'Fashion', 'Home Essentials', 'Sports & Fitness'];
+const TAGS = ['discount', 'bestseller', 'limited', 'new', 'popular', 'recommended'];
 
 export default function MarketplacePicksPage() {
-  const [category, setCategory] = useState(marketplaceCategories[0]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sortKey, setSortKey] = useState("newest");
   const [products, setProducts] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
+  const [category, setCategory] = useState(CATEGORIES[0]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [tags, setTags] = useState([]);
+  const [sortKey, setSortKey] = useState('newest');
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 12;
   const { toast } = useToast();
-  const { addToCart } = useCart();
+  const { wishlistItems, addToWishlist, removeFromWishlist } = useWishlist();
+  const audioRef = useRef(null);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
-        const snapshot = await getDocs(q);
-        setProducts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      } catch (error) {
-        toast({
-          title: "Failed to load marketplace picks",
-          description: error.message || "Please try again later",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchProducts();
-  }, [toast]);
+    audioRef.current = new Audio(successSfx);
+  }, []);
 
-  const fuse = useMemo(() => new Fuse(products, {
-    keys: ["title", "description", "tags"],
-    threshold: 0.35,
-    ignoreLocation: true,
-  }), [products]);
-
-  const filteredByCategory = useMemo(() => {
-    if (!category) return products;
-    return products.filter(p => p.category === category);
-  }, [products, category]);
-
-  const searchedProducts = useMemo(() => {
-    if (!searchTerm.trim()) return filteredByCategory;
-    const results = fuse.search(searchTerm.trim());
-    const searched = results.map(r => r.item);
-    return searched.filter(p => filteredByCategory.includes(p));
-  }, [searchTerm, fuse, filteredByCategory]);
-
-  const sortedProducts = useMemo(() => {
-    let sorted = [...searchedProducts];
-    switch (sortKey) {
-      case "price_asc":
-        sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
-        break;
-      case "price_desc":
-        sorted.sort((a, b) => (b.price || 0) - (a.price || 0));
-        break;
-      case "newest":
-      default:
-        sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        break;
-    }
-    return sorted;
-  }, [searchedProducts, sortKey]);
-
-  const handleAddOrBuy = (product) => {
-    if (product.isCustom) {
-      addToCart(product);
-      toast({ title: "Added to cart", description: `${product.title} has been added to your cart.` });
-    } else if (product.url) {
-      window.open(product.url, "_blank", "noopener,noreferrer");
+  const playSound = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
     }
   };
 
-  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
+  useEffect(() => {
+    (async () => {
+      try {
+        const q = query(collection(db, 'products'), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        setProducts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (e) {
+        toast({ title: 'Failed to load products', description: e.message, variant: 'destructive' });
+      }
+    })();
+  }, [toast]);
+
+  const fuse = useMemo(() => new Fuse(products, { keys: ['title', 'description', 'tags'], threshold: 0.35 }), [products]);
+
+  const filtered = useMemo(() => (
+    products
+      .filter(p => !category || p.category === category)
+      .filter(p => tags.length === 0 || (p.tags && tags.every(t => p.tags.includes(t))))
+  ), [products, category, tags]);
+
+  const searched = useMemo(() => {
+    if (!searchTerm.trim()) return filtered;
+    const results = fuse.search(searchTerm.trim()).map(r => r.item);
+    return results.filter(item => filtered.includes(item));
+  }, [filtered, searchTerm, fuse]);
+
+  const sorted = useMemo(() => {
+    let arr = [...searched];
+    switch (sortKey) {
+      case 'price_asc': arr.sort((a, b) => (a.price ?? 0) - (b.price ?? 0)); break;
+      case 'price_desc': arr.sort((a, b) => (b.price ?? 0) - (a.price ?? 0)); break;
+      default: arr.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); break;
+    }
+    return arr;
+  }, [searched, sortKey]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / itemsPerPage));
+  const pagedProducts = useMemo(() => {
+    const startIdx = (page - 1) * itemsPerPage;
+    return sorted.slice(startIdx, startIdx + itemsPerPage);
+  }, [sorted, page, itemsPerPage]);
+
+  const wishlistIds = useMemo(() => new Set(wishlistItems.map(item => item.id)), [wishlistItems]);
+
+  const handleToggleWishlist = (product) => {
+    const isWishlisted = wishlistIds.has(product.id);
+    if (isWishlisted) {
+      removeFromWishlist(product.id, 'universal');
+      toast({ title: 'Removed from wishlist', description: `${product.title} removed.` });
+    } else {
+      addToWishlist({ ...product, sourceType: 'marketplace', inCart: false, id: product.id }, 'universal');
+      playSound();
+      confetti({ particleCount: 70, spread: 70, origin: { y: 0.6 } });
+      toast({ title: 'Added to wishlist', description: `${product.title} added.` });
+    }
+  };
 
   return (
     <>
-      <Helmet>
-        <title>Marketplace Picks</title>
-        <meta name="description" content="Hottest finds from the web—handpicked for Wishlist2Cart shoppers!" />
-      </Helmet>
+      <Helmet><title>Curated Collection</title></Helmet>
 
       <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}
-        className="container mx-auto px-4 py-12 max-w-7xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.7 }}
+        className="container mx-auto px-4 py-12 max-w-7xl bg-gray-50 dark:bg-gray-900 rounded-xl"
       >
-        {/* Header & Filter */}
+        {/* Header/controls */}
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">Marketplace Picks</h1>
-            <p className="text-lg text-gray-600 dark:text-gray-400 mt-2">
-              Discover trending deals and curated products from our partner stores.
-            </p>
+            <h1 className="text-2xl font-extrabold font-poppins tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-violet-700 to-blue-700 dark:from-violet-400 dark:to-blue-400 select-none">
+              Curated Collection
+            </h1>
+
+            <p className="mt-2 text-lg text-gray-600 dark:text-gray-400 max-w-lg">Handpicked trending deals from trusted partners.</p>
           </div>
-          <div className="flex flex-wrap gap-4">
-            <Input type="search" placeholder="Search products..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-xs" aria-label="Search products" />
-            <select value={sortKey} onChange={e => setSortKey(e.target.value)} aria-label="Sort products" className="rounded-md border border-gray-300 dark:border-gray-700 px-3 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900">
+          <div className="flex flex-wrap gap-3 w-full md:w-auto">
+            <FancySearchBar 
+              value={searchTerm} 
+              onChange={e => { setSearchTerm(e.target.value); setPage(1); }} 
+              onClear={() => setSearchTerm('')} 
+            />
+            <select
+              aria-label="Sort products"
+              value={sortKey}
+              onChange={e => { setSortKey(e.target.value); setPage(1); }}
+              className="rounded border border-gray-300 dark:border-gray-700 px-3 py-2"
+            >
               <option value="newest">Newest</option>
-              <option value="price_asc">Price: Low to High</option>
-              <option value="price_desc">Price: High to Low</option>
+              <option value="price_asc">Price - Low to High</option>
+              <option value="price_desc">Price - High to Low</option>
             </select>
           </div>
         </div>
 
         {/* Categories */}
-        <div className="flex flex-wrap gap-3 mb-8">
-          {marketplaceCategories.map(cat => (
-            <Button key={cat} variant={category === cat ? "default" : "ghost"} className="capitalize" onClick={() => setCategory(cat)} size="sm" aria-pressed={category === cat}>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {CATEGORIES.map(cat => (
+            <Button 
+              key={cat} 
+              variant={cat === category ? 'default' : 'ghost'} 
+              className="capitalize font-semibold" 
+              onClick={() => { setCategory(cat); setPage(1); }}
+            >
               {cat}
             </Button>
           ))}
         </div>
 
-        {/* Products Grid */}
-        {sortedProducts.length === 0 ? (
-          <div className="py-20 text-center text-gray-500 dark:text-gray-400">No products found.</div>
+        {/* Tags */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          {TAGS.map(tag => (
+            <Button 
+              key={tag} 
+              size="sm" 
+              variant={tags.includes(tag) ? 'default' : 'ghost'} 
+              className="uppercase font-semibold" 
+              onClick={() => setTags(tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag])}
+            >
+              {tag}
+            </Button>
+          ))}
+          {tags.length > 0 && <Button size="sm" variant="ghost" onClick={() => setTags([])}>Clear</Button>}
+        </div>
+
+        {/* Product grid */}
+        {pagedProducts.length === 0 ? (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg py-24 text-center text-gray-500 dark:text-gray-400 select-none">No products found.</motion.div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {sortedProducts.map((product, idx) => (
-              <motion.div
-                key={product.id}
-                initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: idx * 0.1 }}
-                className="bg-white dark:bg-gray-800/50 shadow-lg border border-gray-200 dark:border-gray-800 rounded-2xl p-6 flex flex-col group hover:border-green-500 transition cursor-pointer"
-                onClick={() => toggleExpand(product.id)}
-              >
-                <div className="relative mb-4 h-52">
-                  <img
-                    src={product.image || platformLogos[product.platform] || platformLogos.Other}
-                    alt={product.title || product.platform}
-                    className="object-cover h-full w-full rounded-xl"
-                    loading="lazy"
-                  />
-                </div>
-                <h3 className="text-lg font-semibold mb-1 line-clamp-2">{product.title || product.platform}</h3>
-                <p className="text-gray-500 text-sm mb-2 line-clamp-3">{product.description}</p>
-                <div className="flex-1" />
-                <div className="text-xl font-bold text-green-600 mb-4">
-                  {(product.price && product.price > 0)
-                    ? `₹${product.price.toLocaleString()}`
-                    : "See price on site"}
-                </div>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full justify-center cursor-pointer"
-                  onClick={e => { e.stopPropagation(); handleAddOrBuy(product); }}
-                  aria-label={product.isCustom ? "Add to Cart" : `Buy from ${product.platform}`}
-                >
-                  {product.isCustom ? "Add to Cart" : "Buy on Marketplace"}
-                  {!product.isCustom && <ExternalLink className="ml-2 h-4 w-4" />}
-                </Button>
-                {expandedId === product.id && (
-                  <div className="mt-4 p-4 rounded bg-gray-50 dark:bg-gray-800/80">
-                    <img
-                      src={product.image || platformLogos[product.platform] || platformLogos.Other}
-                      className="max-h-32 mb-2"
-                      alt={product.title}
-                    />
-                    <div className="font-bold">{product.title}</div>
-                    <div>{product.description}</div>
-                    {product.price > 0 && (
-                      <div className="mt-2 font-semibold text-green-700">₹{product.price.toLocaleString()}</div>
-                    )}
-                    <div className="mt-2 text-xs text-gray-500">Platform: {product.platform}</div>
-                    <Button
-                      className="mt-4"
-                      variant="secondary"
-                      onClick={e => { e.stopPropagation(); handleAddOrBuy(product); }}
-                    >
-                      {product.isCustom ? "Add to Cart" : "Go to Product"}
-                    </Button>
-                  </div>
-                )}
-              </motion.div>
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
+              {pagedProducts.map(product => {
+                const isWishlisted = wishlistIds.has(product.id);
+                return (
+                  <motion.div
+                    key={product.id}
+                    className="flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 p-5 shadow-lg select-none min-h-[400px]"
+                  >
+                    <div className="relative h-60 w-full rounded-xl overflow-hidden shadow mb-3">
+                      {product.image
+                        ? <img src={product.image} alt={product.title} className="w-full h-full object-cover rounded-xl" loading="lazy" />
+                        : <Skeleton height={240} />}
+                      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                        {product.tags?.map(tag => (
+                          <span key={tag} className="bg-green-600 text-white px-2 py-0.5 rounded text-xs">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <h3 className="font-black text-lg mb-1 truncate text-gray-900 dark:text-white">{product.title}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{product.description}</p>
+                    <div className="flex items-center justify-between mt-2 mb-4">
+                      <span className="flex items-center gap-2 text-gray-400"><Tag className="h-4 w-4" />{product.category}</span>
+                      <span className="font-bold text-lg text-green-700 dark:text-green-400 px-1">₹{product.price?.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-auto">
+                      <motion.button
+                        onClick={e => { e.stopPropagation(); handleToggleWishlist(product); }}
+                        aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        type="button"
+                        className="focus:outline-none bg-transparent p-0"
+                      >
+                        <HeartIcon
+                          size={28}
+                          strokeWidth={2.3}
+                          fill={isWishlisted ? '#dc2626' : 'none'}
+                          stroke={isWishlisted ? '#dc2626' : '#737373'}
+                          style={{ transition: 'all 0.25s' }}
+                        />
+                      </motion.button>
+                      <Button
+                        size="lg"
+                        onClick={e => { e.stopPropagation(); if (product.url) window.open(product.url, '_blank', 'noopener noreferrer'); }}
+                        variant="outline"
+                        aria-label={`Buy ${product.title} on Marketplace`}
+                      >
+                        Buy on Marketplace <ExternalLink className="ml-2 w-4 h-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <Pagination page={page} pages={totalPages} onPage={setPage} />
+          </>
         )}
       </motion.div>
     </>
