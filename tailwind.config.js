@@ -8,6 +8,7 @@ module.exports = {
     './components/**/*.{js,jsx}',
     './app/**/*.{js,jsx}',
     './src/**/*.{js,jsx}',
+    
   ],
   theme: {
     container: {
@@ -70,6 +71,7 @@ module.exports = {
           200: '#A0C8FF',
         },
       },
+      
       
       borderRadius: {
         lg: 'var(--radius)',

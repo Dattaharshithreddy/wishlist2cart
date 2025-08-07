@@ -75,13 +75,13 @@ export default function UserOrdersPage() {
   };
 
   return (
-   <main className="w-full max-w-5xl mx-auto p-6 flex-1 flex flex-col space-y-6">
+    <main className="w-full max-w-5xl mx-auto px-2 sm:px-4 md:px-6 py-3 sm:py-6 flex-1 flex flex-col space-y-4 sm:space-y-6 text-gray-800 dark:text-gray-100">
       {/* Filters */}
-      <section className="flex flex-wrap gap-4 items-center mb-6">
+      <section className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-stretch sm:items-center mb-4 sm:mb-6">
         <label className="flex items-center gap-2 whitespace-nowrap font-medium">
           <span>Status:</span>
           <select
-            className="border rounded p-1"
+            className="w-full sm:w-auto border rounded p-1 dark:bg-gray-800 dark:border-gray-600"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -93,11 +93,11 @@ export default function UserOrdersPage() {
             ))}
           </select>
         </label>
-        <label>
+        <label className="flex items-center gap-2">
           Start Date:
           <input
             type="date"
-            className="border rounded p-1 ml-1"
+            className="w-full sm:w-auto border rounded p-1 dark:bg-gray-800 dark:border-gray-600"
             value={dateRange.startDate ? format(dateRange.startDate, 'yyyy-MM-dd') : ''}
             onChange={(e) =>
               setDateRange((d) => ({
@@ -107,11 +107,11 @@ export default function UserOrdersPage() {
             }
           />
         </label>
-        <label>
+        <label className="flex items-center gap-2">
           End Date:
           <input
             type="date"
-            className="border rounded p-1 ml-1"
+            className="w-full sm:w-auto border rounded p-1 dark:bg-gray-800 dark:border-gray-600"
             value={dateRange.endDate ? format(dateRange.endDate, 'yyyy-MM-dd') : ''}
             onChange={(e) =>
               setDateRange((d) => ({
@@ -122,7 +122,7 @@ export default function UserOrdersPage() {
           />
         </label>
         <button
-          className="ml-2 text-blue-600 underline"
+          className="ml-0 sm:ml-2 text-blue-600 dark:text-blue-400 underline"
           onClick={() => {
             setStatusFilter('all');
             setDateRange({ startDate: null, endDate: null });
@@ -133,19 +133,19 @@ export default function UserOrdersPage() {
         </button>
       </section>
 
-      {/* Loading and Error Handling */}
+      {/* Loading and Error States */}
       {loading && orders.length === 0 && (
-        <p className="p-10 text-center">Loading orders...</p>
+        <p className="p-10 text-center text-gray-500">Loading orders...</p>
       )}
       {error && (
-        <p className="p-10 text-center text-red-600">Error: {error}</p>
+        <p className="p-10 text-center text-red-600 dark:text-red-400">Error: {error}</p>
       )}
       {!loading && !error && orders.length === 0 && (
-        <p className="p-10 text-center">No orders found.</p>
+        <p className="p-10 text-center text-gray-600 dark:text-gray-400">No orders found.</p>
       )}
 
       {/* Orders List */}
-      <section className="space-y-8 flex-grow overflow-auto">
+      <section className="space-y-5 sm:space-y-8 flex-grow overflow-auto">
         {visibleOrders.map((order) => {
           const createdAtDate = order.createdAt?.toDate
             ? order.createdAt.toDate()
@@ -156,39 +156,39 @@ export default function UserOrdersPage() {
           return (
             <article
               key={order.id}
-              className="bg-white p-6 rounded shadow space-y-4"
+              className="bg-white dark:bg-gray-800 p-3 sm:p-6 rounded shadow space-y-3 sm:space-y-4 border border-gray-200 dark:border-gray-700"
             >
-              <header className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Order #{order.id}</h2>
+              <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-semibold break-all">Order #{order.id}</h2>
                 <span
-                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  className={`px-3 py-1 rounded-full text-xs sm:text-sm font-semibold ${
                     order.status === 'Processing'
-                      ? 'bg-indigo-100 text-indigo-800'
+                      ? 'bg-indigo-100 dark:bg-indigo-800/30 text-indigo-800 dark:text-indigo-200'
                       : order.status === 'Ordered'
-                      ? 'bg-blue-100 text-blue-800'
+                      ? 'bg-blue-100 dark:bg-blue-800/30 text-blue-800 dark:text-blue-200'
                       : order.status === 'Shipped'
-                      ? 'bg-yellow-100 text-yellow-800'
+                      ? 'bg-yellow-100 dark:bg-yellow-800/30 text-yellow-800 dark:text-yellow-200'
                       : order.status === 'Out For Delivery'
                       ? 'bg-purple-600 text-white'
                       : order.status === 'Delivered'
-                      ? 'bg-green-100 text-green-800'
+                      ? 'bg-green-100 dark:bg-green-800/30 text-green-800 dark:text-green-200'
                       : order.status === 'Cancelled'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-gray-100 text-gray-800'
+                      ? 'bg-red-100 dark:bg-red-800/30 text-red-800 dark:text-red-200'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                   }`}
                 >
                   {order.status}
                 </span>
               </header>
 
-              {/* Order Details */}
-              <div className="text-sm text-gray-700 space-y-2">
+              {/* Order Info */}
+              <div className="text-xs sm:text-sm space-y-1.5 sm:space-y-2">
                 <div>
                   <strong>Date:</strong> {createdAtFormatted}
                 </div>
                 <div>
                   <strong>Shipping Address:</strong>
-                  <address className="not-italic ml-3 space-y-0.5">
+                  <address className="not-italic ml-1.5 sm:ml-3 space-y-0.5 break-all">
                     <div>{order.address?.fullName}</div>
                     <div>{order.address?.email}</div>
                     <div>{order.address?.address}</div>
@@ -201,55 +201,55 @@ export default function UserOrdersPage() {
               </div>
 
               {/* Status Tracker */}
-              <div className="flex items-center gap-2 flex-wrap text-sm">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto">
                 {ORDER_STATUS_FLOW.map((step, i) => (
                   <React.Fragment key={step}>
                     <span
-                      className={`px-3 py-1 rounded font-semibold ${
+                      className={`px-2 sm:px-3 py-1 rounded font-semibold ${
                         i === statusIndex
                           ? 'bg-purple-600 text-white shadow'
-                          : 'bg-gray-300 text-gray-600'
+                          : 'bg-gray-300 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                       }`}
                     >
                       {step}
                     </span>
-                    {i !== ORDER_STATUS_FLOW.length - 1 && <span>➡️</span>}
+                    {i !== ORDER_STATUS_FLOW.length - 1 && <span className="text-gray-400">➡️</span>}
                   </React.Fragment>
                 ))}
               </div>
 
-              {/* Items */}
-              <div className="space-y-2">
+              {/* Items List */}
+              <div className="space-y-1.5 sm:space-y-2">
                 <strong>Items:</strong>
                 {order.items?.map((item) => (
                   <div
-                    key={item.name}
-                    className="flex justify-between bg-gray-50 p-3 rounded"
+                    key={item.id}
+                    className="flex flex-col sm:flex-row justify-between bg-gray-50 dark:bg-gray-700 p-2 sm:p-3 rounded"
                   >
-                    <div className="flex gap-4 items-center max-w-xs">
+                    <div className="flex gap-2 sm:gap-4 items-center max-w-full sm:max-w-xs">
                       <img
                         src={item.image || '/placeholder.jpg'}
                         alt={item.name}
-                        className="w-16 h-16 object-cover rounded"
+                        className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded"
                       />
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-medium truncate">{item.name}</div>
-                        <div className="text-sm">Qty: {item.quantity}</div>
+                        <div className="text-xs sm:text-sm">Qty: {item.quantity}</div>
                       </div>
                     </div>
-                    <div className="font-semibold">
+                    <div className="font-semibold mt-1 sm:mt-0">
                       ₹{(item.price * item.quantity).toFixed(2)}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-right font-bold text-lg">
+              <div className="text-right font-bold text-base sm:text-lg">
                 Total: ₹{order.total.toFixed(2)}
               </div>
 
               {order.estimatedDelivery && (
-                <div className="text-sm mt-2">
+                <div className="text-xs sm:text-sm mt-1.5 sm:mt-2">
                   <strong>Estimated Delivery:</strong>{' '}
                   {format(
                     order.estimatedDelivery?.toDate
@@ -261,12 +261,12 @@ export default function UserOrdersPage() {
               )}
 
               {order.trackingUrl && (
-                <div className="mt-2 text-right">
+                <div className="mt-1.5 text-right">
                   <a
                     href={order.trackingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 underline"
+                    className="text-blue-600 dark:text-blue-400 underline"
                   >
                     Track Order
                   </a>
@@ -274,24 +274,24 @@ export default function UserOrdersPage() {
               )}
 
               {/* Actions */}
-              <div className="flex flex-wrap gap-3 justify-end items-center">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 justify-end items-stretch sm:items-center w-full">
                 <Button
                   disabled={!logoBase64}
                   onClick={() => exportInvoice(order)}
-                  className={`px-4 py-2 ${
+                  className={`w-full sm:w-auto px-4 py-2 ${
                     !logoBase64
-                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-gray-200 dark:bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
                   Download Invoice PDF
                 </Button>
-
                 {canCancel(order.status) && (
                   <Button
                     onClick={() => handleCancelOrder(order.id)}
                     disabled={cancelLoading[order.id]}
                     variant="destructive"
+                    className="w-full sm:w-auto"
                   >
                     {cancelLoading[order.id] ? 'Cancelling...' : 'Cancel Order'}
                   </Button>
@@ -302,10 +302,10 @@ export default function UserOrdersPage() {
         })}
       </section>
 
-      {/* Load More Button Pagination */}
+      {/* Load More Button */}
       {hasMore && (
-        <div className="text-center mt-6">
-          <Button onClick={loadMore} disabled={loadingMore} className="inline-block">
+        <div className="text-center mt-4 sm:mt-6">
+          <Button onClick={loadMore} disabled={loadingMore} className="w-full sm:w-auto">
             {loadingMore ? 'Loading...' : 'Load More'}
           </Button>
         </div>

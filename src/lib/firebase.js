@@ -7,7 +7,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyAi5sO9YJAhy_x6nMbJWNif96N_JJQC8LU",
   authDomain: "wishlist2cart-web.firebaseapp.com",
   projectId: "wishlist2cart-web",
-  storageBucket: "wishlist2cart-web.appspot.com",  // usually .appspot.com
+  storageBucket: "wishlist2cart-web.firebasestorage.app",  // usually .appspot.com
   messagingSenderId: "671248690215",
   appId: "1:671248690215:web:425a8e80ed464ad6877202",
 };

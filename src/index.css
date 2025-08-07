@@ -88,3 +88,54 @@ body {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+/* Light mode variables (already defined) */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4%;
+  --primary: 262 83% 58%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 84% 4%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16% 47%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 84% 4%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 262 83% 58%;
+  --radius: 0.75rem;
+}
+
+/* Dark mode overrides */
+.dark {
+  --background: 222.2 15% 10%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 15% 10%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 20% 15%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 262 72% 62%;
+  --primary-foreground: 255 255 255; /* pure white */
+  --secondary: 210 40% 15%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 210 40% 15%;
+  --muted-foreground: 210 40% 85%;
+  --accent: 210 40% 25%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 63%;
+  --destructive-foreground: 255 255 255;
+  --border: 222 20% 40%;
+  --input: 222 20% 40%;
+  --ring: 262 72% 62%;
+}
+
+/* Ensure body also supports smooth color transitions */
+body {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

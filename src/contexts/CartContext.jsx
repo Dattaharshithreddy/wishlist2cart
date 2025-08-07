@@ -1,4 +1,3 @@
-// src/contexts/CartContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { db } from '@/lib/firebase';
@@ -16,7 +15,7 @@ import {
 
 const CartContext = createContext();
 
-const COLLECTION = 'cart_items'; // Your Firestore cart collection name
+const COLLECTION = 'cart_items'; // Your Firestore collection name
 
 export const CartProvider = ({ children }) => {
   const { user } = useAuth();
@@ -24,16 +23,11 @@ export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Coupon state
-  const [couponApplied, setCouponApplied] = useState(false);
-  const [couponDiscountPercent, setCouponDiscountPercent] = useState(0); // example 10 for 10%
-
+  // Fetch cart items for the logged-in user
   useEffect(() => {
     if (!user) {
       setCartItems([]);
       setLoading(false);
-      setCouponApplied(false);
-      setCouponDiscountPercent(0);
       return;
     }
     setLoading(true);
@@ -47,7 +41,7 @@ export const CartProvider = ({ children }) => {
         }));
         setCartItems(items);
       } catch (error) {
-        console.error('[CartContext] Failed to fetch cart:', error);
+        console.error('[CartContext] Failed to fetch:', error);
         setCartItems([]);
       } finally {
         setLoading(false);
@@ -56,20 +50,16 @@ export const CartProvider = ({ children }) => {
     fetchCart();
   }, [user]);
 
-  // Existing add/remove/set-quantity methods unchanged
-  // ...
-
+  // Add item to cart or increase quantity if exists
   const addToCart = useCallback(
-    async product => {
+    async (product) => {
       if (!user) throw new Error('Not logged in');
       const existing = cartItems.find(i => i.id === product.id);
       try {
         if (existing) {
           const newQuantity = (existing.quantity || 1) + 1;
           await updateDoc(doc(db, COLLECTION, existing._docId), { quantity: newQuantity });
-          setCartItems(prev =>
-            prev.map(i => (i.id === product.id ? { ...i, quantity: newQuantity } : i))
-          );
+          setCartItems(prev => prev.map(i => i.id === product.id ? { ...i, quantity: newQuantity } : i));
         } else {
           const data = {
             ...product,
@@ -89,8 +79,9 @@ export const CartProvider = ({ children }) => {
     [user, cartItems]
   );
 
+  // Remove item from cart
   const removeFromCart = useCallback(
-    async itemId => {
+    async (itemId) => {
       if (!user) throw new Error('Not logged in');
       const existing = cartItems.find(i => i.id === itemId);
       if (!existing) return;
@@ -105,6 +96,7 @@ export const CartProvider = ({ children }) => {
     [user, cartItems]
   );
 
+  // Set item quantity
   const setQuantity = useCallback(
     async (itemId, quantity) => {
       if (!user) throw new Error('Not logged in');
@@ -113,7 +105,7 @@ export const CartProvider = ({ children }) => {
       if (!existing) return;
       try {
         await updateDoc(doc(db, COLLECTION, existing._docId), { quantity });
-        setCartItems(prev => prev.map(i => (i.id === itemId ? { ...i, quantity } : i)));
+        setCartItems(prev => prev.map(i => i.id === itemId ? { ...i, quantity } : i));
       } catch (error) {
         console.error('[CartContext] setQuantity error:', error);
         throw error;
@@ -122,64 +114,39 @@ export const CartProvider = ({ children }) => {
     [user, cartItems]
   );
 
-  // Calculate total considering coupon discount
+  // Calculate total without coupon discount
   const getTotalValue = useMemo(() => {
-    const total = cartItems.reduce(
-      (acc, item) => acc + (item.price ?? 0) * (item.quantity ?? 1),
-      0
-    );
-    if (couponApplied && couponDiscountPercent > 0) {
-      return +(total * (1 - couponDiscountPercent / 100)).toFixed(2);
-    }
-    return total;
-  }, [cartItems, couponApplied, couponDiscountPercent]);
+    return cartItems.reduce((acc, item) => acc + (item.price ?? 0) * (item.quantity ?? 1), 0);
+  }, [cartItems]);
 
+  // Clear cart
   const clearCart = useCallback(async () => {
     if (!user) throw new Error('Not logged in');
     try {
       await Promise.all(cartItems.map(item => deleteDoc(doc(db, COLLECTION, item._docId))));
       setCartItems([]);
-      setCouponApplied(false);
-      setCouponDiscountPercent(0);
     } catch (error) {
       console.error('[CartContext] clearCart error:', error);
     }
   }, [user, cartItems]);
 
-  // Expose a function to apply coupon (could add validation here)
-  const applyCoupon = (percent) => {
-    if (!couponApplied) {
-      setCouponApplied(true);
-      setCouponDiscountPercent(percent);
-    }
-  };
-
-  const value = useMemo(
-    () => ({
-      cartItems,
-      addToCart,
-      removeFromCart,
-      setQuantity,
-      getTotalValue,
-      clearCart,
-      loading,
-      couponApplied,
-      couponDiscountPercent,
-      applyCoupon,
-    }),
-    [
-      cartItems,
-      addToCart,
-      removeFromCart,
-      setQuantity,
-      getTotalValue,
-      clearCart,
-      loading,
-      couponApplied,
-      couponDiscountPercent,
-      applyCoupon,
-    ]
-  );
+  const value = useMemo(() => ({
+    cartItems,
+    addToCart,
+    removeFromCart,
+    setQuantity,
+    getTotalValue,
+    clearCart,
+    loading,
+  }), [
+    cartItems,
+    addToCart,
+    removeFromCart,
+    setQuantity,
+    getTotalValue,
+    clearCart,
+    loading,
+  ]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 };

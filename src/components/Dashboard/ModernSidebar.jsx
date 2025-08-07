@@ -8,11 +8,14 @@ import {
   Settings,
   Shield,
   X,
+   Gift,
   ChevronsLeft,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { CustomButton } from './CustomButton';
 import { useAuth } from '@/contexts/AuthContext';
+import RewardsPage from '@/pages/RewardsPage';
+
 
 const ModernSidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
   const [isDesktopCollapsed, setDesktopCollapsed] = useState(false);
@@ -30,6 +33,8 @@ const ModernSidebar = ({ isMobileMenuOpen, setIsMobileMenuOpen }) => {
     { label: 'My Cart', to: '/dashboard/cart', Icon: ShoppingCart },
     { label: 'My Orders', to: '/dashboard/orders', Icon: Package },
     { label: 'Settings', to: '/dashboard/settings', Icon: Settings },
+    { label: 'Rewards', to: '/dashboard/rewards', Icon: Gift },
+
   ];
 
   const adminNavItems = isAdmin

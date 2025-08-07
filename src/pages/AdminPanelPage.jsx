@@ -310,7 +310,8 @@ export default function AdminAddEditProduct({
           disabled={loading || uploading || fetchingMeta}
           value={form.type}
           onChange={(e) => handleChange("type", e.target.value)}
-          className="w-full border rounded px-3 py-2"
+          className="w-full border border-gray-300 dark:border-gray-700 rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+
         >
           {productTypes.map((p) => (
             <option key={p.value} value={p.value}>
@@ -364,7 +365,8 @@ export default function AdminAddEditProduct({
           disabled={loading || uploading || fetchingMeta}
           value={form.description}
           onChange={(e) => handleChange("description", e.target.value)}
-          className="w-full border rounded px-3 py-2"
+          className="w-full border border-gray-300 dark:border-gray-700 rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+
           rows={3}
           placeholder="Enter product description (optional)"
         />
@@ -384,9 +386,9 @@ export default function AdminAddEditProduct({
         <div className="mt-2 flex items-center gap-4">
           <label
             htmlFor="image-upload"
-            className={`cursor-pointer inline-flex items-center gap-2 rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 ${
-              uploading ? "opacity-60 cursor-wait" : ""
-            }`}
+            className={`cursor-pointer inline-flex items-center gap-2 rounded-md border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-sm font-medium text-gray-700 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 ${uploading ? "opacity-60 cursor-wait" : ""}`}
+
+            
           >
             Upload Image
             <input
@@ -467,7 +469,8 @@ export default function AdminAddEditProduct({
           disabled={loading || uploading || fetchingMeta}
           value={form.platform}
           onChange={(e) => handleChange("platform", e.target.value)}
-          className="w-full border rounded px-3 py-2"
+          className="w-full border border-gray-300 dark:border-gray-700 rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+
           required
         >
           {platforms.map((p) => (
@@ -488,7 +491,8 @@ export default function AdminAddEditProduct({
           disabled={loading || uploading || fetchingMeta}
           value={form.category}
           onChange={(e) => handleChange("category", e.target.value)}
-          className="w-full border rounded px-3 py-2"
+          className="w-full border border-gray-300 dark:border-gray-700 rounded px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+
           required
         >
           {categories.map((c) => (

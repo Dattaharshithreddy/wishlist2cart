@@ -72,10 +72,16 @@ const HomePage = () => {
             </Link>
 
             <Link to="/login">
-              <Button variant="ghost" size="sm" className="text-sm">
-                <LogIn className="h-4 w-4 mr-1" />
-                Login
-              </Button>
+              <Button
+  variant="ghost"
+  size="sm"
+  className="text-sm text-gray-800 hover:bg-gray-100
+             dark:text-white dark:hover:bg-gray-800"
+>
+  <LogIn className="h-4 w-4 mr-1" />
+  Login
+</Button>
+
             </Link>
           </div>
         </header>
@@ -121,11 +127,35 @@ const HomePage = () => {
                   Add Wishlist <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" asChild>
-                <Link to="/cart">
-                  View Cart <ShoppingCart className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+              <Button
+  size="lg"
+  asChild
+  className="
+    bg-blue-600
+    dark:bg-blue-700
+    text-white
+    border-none
+    hover:bg-blue-700
+    dark:hover:bg-blue-800
+    transition
+    focus:outline-none
+    focus:ring-2
+    focus:ring-blue-500
+    dark:focus:ring-blue-300
+    rounded-lg
+    px-5
+    py-2.5
+    font-semibold
+    shadow
+  "
+>
+  <Link to="/cart">
+    View Cart <ShoppingCart className="ml-2 h-5 w-5" />
+  </Link>
+</Button>
+
+
+
             </motion.div>
           </div>
         </section>

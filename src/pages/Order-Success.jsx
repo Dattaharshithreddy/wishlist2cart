@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import CheckCircleIcon from '@heroicons/react/24/solid/CheckCircleIcon';
-
+import { useRewards } from '@/contexts/RewardContext';
 
 const OrderSuccess = () => {
+  const { addPoints } = useRewards();
+
+  useEffect(() => {
+    // Award 100 loyalty points after order is successfully placed
+    addPoints(100);
+  }, [addPoints]);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e0f6ff] via-[#f3f7ff] to-[#c0e3ff]">
       <div className="max-w-md w-full mx-auto p-8 bg-white shadow-2xl rounded-2xl relative">

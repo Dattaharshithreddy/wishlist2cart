@@ -69,10 +69,10 @@ export const POPUP_STYLES = `
   background: transparent;
   border: 1px solid #3b3d4a;
   color: white;
+}
 
-  &:hover {
-    background:#474958;
-  }
+#inline-editor-popup .cancel-button:hover {
+  background: #474958;
 }
 `;
 
@@ -84,7 +84,7 @@ export function getPopupHTMLTemplate(saveLabel, cancelLabel) {
       <button class="popup-button save-button">${saveLabel}</button>
     </div>
   `;
-};
+}
 
 export const EDIT_MODE_STYLES = `
   #root[data-edit-mode-enabled="true"] [data-edit-id] {

@@ -5,6 +5,7 @@ import { Trash, ShoppingCart, ExternalLink, Tag } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '@/contexts/CartContext';
+import { useWishlist } from '@/contexts/WishlistContext';  // IMPORT THE CONTEXT
 
 const storeLogos = {
   Amazon: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
@@ -13,10 +14,11 @@ const storeLogos = {
   Other: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/Shopping_cart_font_awesome.svg',
 };
 
-export default function WishlistItemCard({ item, onDelete }) {
+export default function WishlistItemCard({ item }) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { cartItems, addToCart } = useCart();
+  const { removeFromWishlist } = useWishlist();  // GET REMOVE FUNCTION
   const [isAdding, setIsAdding] = useState(false);
 
   const isMarketplace =
@@ -62,6 +64,22 @@ export default function WishlistItemCard({ item, onDelete }) {
     }
   };
 
+  const handleRemoveClick = async () => {
+    try {
+      await removeFromWishlist(item.id, item.sourceType || 'universal'); // pass sourceType accordingly
+      toast({
+        title: 'Removed',
+        description: `${item.title} has been removed from your wishlist.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Could not remove item from wishlist.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <motion.div
       layout
@@ -72,16 +90,20 @@ export default function WishlistItemCard({ item, onDelete }) {
       whileFocus={{ scale: 1.03 }}
       transition={{ duration: 0.35 }}
       className="
-        relative flex flex-col justify-between rounded-2xl shadow-xl border border-gray-300 dark:border-gray-700
+        relative flex flex-col justify-between rounded-2xl shadow-xl border
+        border-gray-300 dark:border-gray-700
         bg-white dark:bg-gray-900 p-6 min-h-[520px] max-w-[440px] w-full
         focus:outline-none focus:ring-4 focus:ring-violet-400 dark:focus:ring-violet-600
-        cursor-pointer
+        cursor-pointer transition-colors
       "
       tabIndex={0}
       role="listitem"
       aria-label={`Wishlist item: ${item.title}`}
     >
+      {/* Your existing product image, title, price, tags and action buttons */}
+
       <div>
+        {/* Product Image */}
         <div className="w-full flex justify-center mb-6">
           <div className="w-full h-[220px] rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center border border-gray-200 dark:border-gray-700 shadow-inner overflow-hidden mb-6">
             <img
@@ -93,22 +115,28 @@ export default function WishlistItemCard({ item, onDelete }) {
             />
           </div>
         </div>
+
+        {/* Product Title */}
         <h3
           className="w-full text-center text-2xl font-extrabold font-poppins text-gray-900 dark:text-white mb-2 break-words truncate"
           title={item.title}
         >
           {item.title}
         </h3>
+
+        {/* Price */}
         <div className="w-full flex justify-center mb-3">
           <span className="text-xl font-semibold text-green-700 dark:text-green-400">
             ₹{item.price?.toLocaleString() || 'N/A'}
           </span>
         </div>
+
+        {/* Tags */}
         <div className="flex flex-wrap justify-center gap-2 mb-6">
           {(item.tags || []).map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center gap-1 rounded-full bg-gray-200 dark:bg-gray-800 px-3 py-1 text-xs font-semibold text-gray-700 dark:text-gray-300 select-none"
+              className="inline-flex items-center gap-1 rounded-full bg-gray-200 dark:bg-gray-700 px-3 py-1 text-xs font-semibold text-gray-700 dark:text-gray-300 select-none"
               aria-label={`Tag: ${tag}`}
             >
               <Tag className="w-3 h-3" />
@@ -118,6 +146,7 @@ export default function WishlistItemCard({ item, onDelete }) {
         </div>
       </div>
 
+      {/* Action Buttons */}
       <div className="flex items-center justify-between w-full gap-4 flex-nowrap">
         <div className="flex-grow min-w-0">
           {isMarketplace ? (
@@ -125,7 +154,7 @@ export default function WishlistItemCard({ item, onDelete }) {
               onClick={handleBuyClick}
               variant="outline"
               size="lg"
-              className="w-full whitespace-nowrap font-semibold text-violet-700 dark:text-violet-300"
+              className="w-full whitespace-nowrap font-semibold text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/20 transition-colors"
               aria-label={`Buy ${item.title} on Marketplace`}
             >
               Buy on Marketplace <ExternalLink className="ml-2" />
@@ -136,7 +165,10 @@ export default function WishlistItemCard({ item, onDelete }) {
               disabled={isAdding}
               variant={isInCart ? 'outline' : 'default'}
               size="lg"
-              className="w-full whitespace-nowrap font-semibold"
+              className={`
+                w-full whitespace-nowrap font-semibold transition-colors
+                ${isInCart ? 'bg-transparent dark:bg-transparent text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 border border-violet-700 dark:border-violet-300' : ''}
+              `}
               aria-label={isInCart ? `View ${item.title} in cart` : `Move ${item.title} to cart`}
             >
               <ShoppingCart className="mr-2 w-5 h-5" />
@@ -144,12 +176,13 @@ export default function WishlistItemCard({ item, onDelete }) {
             </Button>
           )}
         </div>
+
         <Button
-          onClick={() => onDelete(item.id)}
+          onClick={handleRemoveClick}
           variant="ghost"
           size="icon"
           aria-label={`Remove ${item.title} from wishlist`}
-          className="text-red-600 dark:text-red-400 flex-shrink-0 hover:bg-red-100 dark:hover:bg-red-900/50 transition"
+          className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition"
           style={{ minWidth: 44, minHeight: 44 }}
         >
           <Trash className="w-6 h-6" />

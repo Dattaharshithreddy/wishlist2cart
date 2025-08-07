@@ -124,11 +124,12 @@ export default function MarketplacePicksPage() {
               onClear={() => setSearchTerm('')} 
             />
             <select
-              aria-label="Sort products"
-              value={sortKey}
-              onChange={e => { setSortKey(e.target.value); setPage(1); }}
-              className="rounded border border-gray-300 dark:border-gray-700 px-3 py-2"
-            >
+  aria-label="Sort products"
+  value={sortKey}
+  onChange={e => { setSortKey(e.target.value); setPage(1); }}
+  className="rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2"
+>
+
               <option value="newest">Newest</option>
               <option value="price_asc">Price - Low to High</option>
               <option value="price_desc">Price - High to Low</option>
@@ -163,22 +164,38 @@ export default function MarketplacePicksPage() {
               {tag}
             </Button>
           ))}
-          {tags.length > 0 && <Button size="sm" variant="ghost" onClick={() => setTags([])}>Clear</Button>}
+          {tags.length > 0 && <Button 
+  size="sm" 
+  variant="ghost" 
+  onClick={() => setTags([])}
+  className="text-gray-700 dark:text-gray-300 hover:text-black dark:hover:text-white"
+>
+  Clear
+</Button>
+}
         </div>
 
         {/* Product grid */}
         {pagedProducts.length === 0 ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-lg py-24 text-center text-gray-500 dark:text-gray-400 select-none">No products found.</motion.div>
+          <motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  className="text-lg py-24 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-xl"
+>
+  No products found.
+</motion.div>
+
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-8">
               {pagedProducts.map(product => {
                 const isWishlisted = wishlistIds.has(product.id);
                 return (
-                  <motion.div
-                    key={product.id}
-                    className="flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 p-5 shadow-lg select-none min-h-[400px]"
-                  >
+                 <motion.div
+  key={product.id}
+  className="flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 p-5 shadow-md dark:shadow-none select-none min-h-[400px]"
+>
+
                     <div className="relative h-60 w-full rounded-xl overflow-hidden shadow mb-3">
                       {product.image
                         ? <img src={product.image} alt={product.title} className="w-full h-full object-cover rounded-xl" loading="lazy" />
